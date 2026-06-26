@@ -30,19 +30,60 @@ The skill walks an AI agent through:
 
 ## Quick start
 
-### Install
+### Install — one line
 
 ```bash
-# User-wide (recommended)
-mkdir -p ~/.claude/skills/reality-handshake
-cp SKILL.md ~/.claude/skills/reality-handshake/SKILL.md
-
-# Or per-project
-mkdir -p .claude/skills/reality-handshake
-cp SKILL.md .claude/skills/reality-handshake/SKILL.md
+curl -fsSL https://raw.githubusercontent.com/toolazytoname/reality-handshake/main/install.sh | sh
 ```
 
-Claude Code picks it up automatically — no restart needed.
+That's it. No `git clone`, no `mkdir`, no manual `cp`. The script:
+
+- Downloads `SKILL.md` straight from `main`
+- Installs to `~/.claude/skills/reality-handshake/SKILL.md`
+- Verifies the download looks like a real SKILL.md (frontmatter check)
+- Re-running is safe (overwrites in place)
+
+**Custom paths:**
+
+```bash
+# Per-project install
+INSTALL_DIR="$PWD/.claude/skills/reality-handshake" \
+  curl -fsSL https://raw.githubusercontent.com/toolazytoname/reality-handshake/main/install.sh | sh
+
+# Different branch / fork
+BRANCH=dev REPO=yourname/reality-handshake \
+  curl -fsSL https://raw.githubusercontent.com/toolazytoname/reality-handshake/main/install.sh | sh
+```
+
+### Manual install (if you don't trust curl | sh)
+
+```bash
+mkdir -p ~/.claude/skills/reality-handshake
+curl -fsSL https://raw.githubusercontent.com/toolazytoname/reality-handshake/main/SKILL.md \
+  -o ~/.claude/skills/reality-handshake/SKILL.md
+```
+
+Or if you've cloned this repo:
+
+```bash
+cp SKILL.md ~/.claude/skills/reality-handshake/SKILL.md
+```
+
+### Verify
+
+```bash
+ls -la ~/.claude/skills/reality-handshake/SKILL.md
+head -3 ~/.claude/skills/reality-handshake/SKILL.md
+# Should show: --- / name: reality-handshake / description: Diagnose VLESS+Reality...
+```
+
+### Uninstall
+
+```bash
+rm -rf ~/.claude/skills/reality-handshake
+```
+
+Claude Code picks up the skill automatically on next message — no restart needed.
 
 ### Trigger
 
@@ -107,6 +148,7 @@ Other proxy stacks (sing-box, Outline, shadowsocks) have different protocols but
 ```
 .
 ├── SKILL.md              # The skill itself (only file Claude Code reads)
+├── install.sh            # curl-able one-line installer
 ├── README.md             # This file
 ├── LICENSE               # MIT
 ├── CONTRIBUTING.md       # How to contribute
