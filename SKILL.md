@@ -1,6 +1,6 @@
 ---
 name: reality-handshake
-description: Diagnose VLESS+Reality / proxy handshake failures. Use PROACTIVELY when user reports "proxy doesn't work", "代理不管用了", "代理失效", curl through proxy returns empty / SSL_ERROR_SYSCALL, or ping to a host returns 100% loss (which is NORMAL and not a proxy bug). Guides through client-side (.bashrc aliases, env vars) and server-side (xray debug logs on the upstream Vultr/host) investigation, then fixes the most common cause — dest site banning the server's IP — by rotating the dest/serverNames in both server config.json and client config.
+description: Diagnose VLESS+Reality / proxy handshake failures, and connect new clients (Linux server, macOS CLI, macOS GUI/ClashX Meta) to an existing Reality server. Use PROACTIVELY when user reports "proxy doesn't work", "代理不管用了", "代理失效", curl through proxy returns empty / SSL_ERROR_SYSCALL, or ping to a host returns 100% loss (which is NORMAL and not a proxy bug). Guides through client-side (.bashrc aliases, env vars) and server-side (xray debug logs on the upstream Vultr/host) investigation, fixes the most common cause — dest site banning the server's IP — by rotating dest/serverNames, detects blocked entry IPs (domain IP dead on all ports while the server's other IP works), and sets up macOS clients two ways: command-line xray or ClashX Meta GUI.
 ---
 
 # Reality Handshake Debug
@@ -146,6 +146,108 @@ curl -s --max-time 10 -x http://127.0.0.1:10809 https://api.ipify.org
 6. **Server time skew** — Reality validates client time. If client clock is >1 min off, auth fails silently. Check `date` on both.
 7. **mihomo xray service conflict** — both default to port 10809. Run only one at a time. `pkill -f mihomo` before starting xray, or vice versa.
 
+## Step 5b: The "Entry IP Is Blocked, But the Server Isn't" Diagnosis
+
+A different failure mode: config and credentials are 100% correct, but the client simply cannot TCP-connect to the server. Before blaming the protocol, check **which IP you're connecting to** — a server can have several IPs, and GFW/ISP blocking is per-IP, not per-server.
+
+Real case: a VPS had its xray domain resolving to IP-A (dead from the client's home network on **every** port), while its primary IP-B (the one in `~/.ssh/config`, used daily for SSH) was fully reachable — including the xray inbound port, because xray listens on `0.0.0.0`.
+
+### How to check
+
+```bash
+# 1. What IP does the client config actually use?
+dig +short your.xray.domain
+
+# 2. Single-port block or whole-IP block? Test several ports:
+for p in 8443 443 80 22; do nc -z -G 4 IP_A $p && echo "$p ok" || echo "$p DEAD"; done
+# ALL ports dead = IP-level block. Only the xray port dead = port-level.
+
+# 3. Does the server have another IP you already reach (e.g. for SSH)?
+grep -A3 'Host myserver' ~/.ssh/config | grep HostName
+for p in 8443 22; do nc -z -G 4 IP_B $p && echo "$p ok" || echo "$p DEAD"; done
+```
+
+### The fix
+
+Point the client `address` at the reachable IP. Reality does **not** care about the connecting IP or the domain — `serverName` (SNI) is what matters, so no other config change is needed.
+
+**Tell-tale symptom of partial/transient blocking:** an otherwise-correct chain that flaps — Google works, then times out, then works again — while the server's own egress is perfect (`curl` from the server itself: 200 in 0.06s). That's QoS/blocking on the transit path to that specific IP, not a config bug.
+
+## macOS: Connecting a Mac Client to an Existing Reality Server
+
+Two supported paths. Both verified end-to-end (xray 26.3.27 darwin/arm64, mihomo v1.19.28 / ClashX Meta v1.4.43).
+
+### Path A — CLI xray (mirrors the Linux server setup)
+
+1. **Install.** `brew install xray` often hangs forever because GitHub is unreachable without a proxy (chicken-and-egg). Workaround: download the release **on an already-proxied server** (or the upstream itself) and `scp` it back:
+   ```bash
+   ssh root@UPSTREAM 'cd /tmp && curl -sLO https://github.com/XTLS/Xray-core/releases/download/vX.Y.Z/Xray-macos-arm64-v8a.zip && unzip -qo Xray-macos-arm64-v8a.zip -d xray-mac'
+   mkdir -p ~/xray-local && scp root@UPSTREAM:/tmp/xray-mac/{xray,geoip.dat,geosite.dat} ~/xray-local/ && chmod +x ~/xray-local/xray
+   ```
+   ⚠️ Asset name trap: the arm64 asset is `Xray-macos-arm64-v8a.zip` — `Xray-macos-arm64.zip` returns a 9-byte "Not Found". Intel Macs use `Xray-macos-64.zip`. Check real names via `api.github.com/repos/XTLS/Xray-core/releases/latest`. Files copied via `scp` carry **no quarantine xattr** and run directly; browser-downloaded ones need `xattr -dr com.apple.quarantine`.
+2. **Config.** Same JSON as a Linux client. No `systemctl` — run it plainly:
+   ```bash
+   cd ~/xray-local && ./xray run -c config.json   # foreground/background
+   pkill -f 'xray run'                             # stop
+   ```
+   Use `launchd` if autostart is needed.
+3. **Verify:** `curl -s -x http://127.0.0.1:10809 https://api.ipify.org` → upstream IP.
+
+### Path B — GUI: ClashX Meta
+
+1. **Original ClashX cannot do VLESS+Reality** (Clash Premium core). You need a mihomo-core GUI: ClashX Meta, Mihomo Party, Clash Verge (rev). Check what's installed: `ls /Applications | grep -i clash`.
+2. **Config dir is `~/.config/clash.meta/`** (original ClashX uses `~/.config/clash/`). Write a `config.yaml` there — full working skeleton:
+   ```yaml
+   mixed-port: 7891                      # 7890/9090 belong to original ClashX — pick free ports
+   external-controller: 127.0.0.1:9097
+   mode: rule
+   log-level: warning
+   proxies:
+     - name: "my-reality"
+       type: vless
+       server: REACHABLE_IP              # see Step 5b — IP is fine, SNI does the work
+       port: 8443
+       uuid: <UUID>
+       network: tcp
+       udp: true
+       tls: true
+       servername: www.samsung.com       # = serverNames[] on the server
+       client-fingerprint: chrome
+       reality-opts:
+         public-key: <PUBLIC_KEY>
+         short-id: "68"
+   proxy-groups:
+     - {name: PROXY, type: select, proxies: [my-reality, DIRECT]}
+   rules:
+     - GEOSITE,cn,DIRECT
+     - GEOIP,CN,DIRECT
+     - MATCH,PROXY
+   ```
+3. **Validate the config without the GUI** — the mihomo core ships gzipped inside the bundle:
+   ```bash
+   gunzip -c "/Applications/ClashX Meta.app/Contents/Resources/com.metacubex.ClashX.ProxyConfigHelper.meta.gz" > /tmp/mihomo && chmod +x /tmp/mihomo
+   /tmp/mihomo -d ~/.config/clash.meta -f ~/.config/clash.meta/config.yaml -t
+   ```
+4. **The #1 GUI gotcha: the core is spawned by a privileged helper.** On first launch the app stays alive but **no core ever starts** (empty `~/.config/clash.meta/logs/*/clashx_mihomo.log`, no listening ports) until the user authorizes the helper install **interactively** (password dialog / System Settings → Login Items). Launching from a terminal cannot click that dialog — hand this step to the user. Verify the helper landed: `ls /Library/PrivilegedHelperTools/com.metacubex.ClashX.ProxyConfigHelper`. After it exists, `open -a "ClashX Meta"` starts the core normally.
+5. **Verify via the core API:**
+   ```bash
+   curl -s http://127.0.0.1:9097/version                                    # {"meta":true,...}
+   curl -s "http://127.0.0.1:9097/proxies/my-reality/delay?url=https://www.gstatic.com/generate_204&timeout=10000"
+   curl -s -x http://127.0.0.1:7891 https://api.ipify.org                   # → upstream IP
+   ```
+6. **System proxy: let the app manage it.** Do NOT write it yourself with `networksetup` — the app restores the setting on quit only if it set it; a `networksetup`-written proxy pointing at a dead app kills the whole machine's network. The user clicks "设置为系统代理" in the menu bar.
+7. **Coexistence.** Only one client may hold "set as system proxy". Quit the original gracefully: `osascript -e 'quit app "ClashX"'` (it restores system proxy on quit).
+
+### macOS vs Linux cheat sheet
+
+| Linux | macOS |
+|---|---|
+| `systemctl restart xray` | run binary directly / `launchd` |
+| `ss -tlnp` | `lsof -nP -iTCP:PORT -sTCP:LISTEN` |
+| `timeout 5 bash -c "echo > /dev/tcp/H/P"` | `nc -z -G 5 H P` |
+| `/usr/local/etc/xray/config.json` | anywhere, e.g. `~/xray-local/config.json` |
+| quit service | `osascript -e 'quit app "X"'` / `pkill -f` |
+
 ## Diagnostic Command Cheat Sheet
 
 ```bash
@@ -175,6 +277,10 @@ proxy broken?
   ↓
 [2] direct curl works?     → proxy path is the issue
   ↓
+[2b] can't even TCP-connect to server? → nc several ports;
+     ALL dead = entry IP blocked → switch client address
+     to another reachable IP of the same server (Step 5b)
+  ↓
 [3] ports match client↔server? → check xray config.json both sides
   ↓
 [4] credentials match?     → derive server pubKey, compare to client
@@ -184,6 +290,12 @@ proxy broken?
     with conn/AuthKey/shortId ALL matching?
   ↓
 [6] DEST IS BANNED. Rotate dest+serverNames both sides. Done.
+
+new client to add?
+  ↓
+macOS CLI    → scp xray from a proxied host, run directly (Path A)
+macOS GUI    → ClashX Meta; original ClashX CANNOT do Reality;
+               core needs one interactive helper authorization (Path B)
 ```
 
 ## When to Ask User vs Act

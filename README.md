@@ -1,11 +1,11 @@
 # reality-handshake
 
-> A [Claude Code skill](https://docs.claude.com/en/docs/claude-code/skills) for diagnosing **VLESS+Reality / XTLS** proxy handshake failures.
+> A [Claude Code skill](https://docs.claude.com/en/docs/claude-code/skills) for diagnosing **VLESS+Reality / XTLS** proxy handshake failures — and for connecting new clients (Linux servers, macOS CLI, macOS GUI) to an existing Reality server.
 
-When your proxy "doesn't work anymore", this skill walks through client-side and server-side diagnosis, then fixes the most common cause: **the dest site has banned your upstream server's IP from being impersonated**.
+When your proxy "doesn't work anymore", this skill walks through client-side and server-side diagnosis, then fixes the most common cause: **the dest site has banned your upstream server's IP from being impersonated**. It also covers the second-most-common cause: **the entry IP your domain resolves to is blocked, while another IP of the same server works fine**.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![xray-core: 1.8.x](https://img.shields.io/badge/xray--core-1.8.x-blue)](https://github.com/XTLS/Xray-core)
+[![xray-core: 1.8.x–26.x](https://img.shields.io/badge/xray--core-1.8.x--26.x-blue)](https://github.com/XTLS/Xray-core)
 
 ## What it does
 
@@ -14,19 +14,26 @@ Triggers when a user reports:
 - "代理不管用了" / "proxy doesn't work" / "代理失效"
 - `curl` through the proxy returns empty / `SSL_ERROR_SYSCALL`
 - `ping` shows 100% loss (which is **NORMAL** and not a proxy bug — see [Why ping is the wrong test](#why-ping-is-the-wrong-test))
+- "can my Mac also use this proxy?" — yes, two ways
 
 The skill walks an AI agent through:
 
 1. **Client-side audit** — `.bashrc` aliases, `http_proxy` env vars, xray inbounds
 2. **Server-side audit** — SSH to upstream, read `config.json`, derive server `publicKey` from `privateKey`
 3. **Credential matching** — UUID / publicKey / shortId / serverName all match between client and server
-4. **Debug log inspection** — set `loglevel: "debug"`, look for the smoking gun:
+4. **Blocked entry IP diagnosis** — distinguish **port-level vs IP-level blocking** with `nc` probes; if the domain's IP is dead on all ports but another IP of the same server is alive, repoint the client `address` at the working IP (Reality only cares about SNI, not the connect IP)
+5. **Debug log inspection** — set `loglevel: "debug"`, look for the smoking gun:
    ```
    hs.c.conn == conn: true
    hs.c.handshakeStatus: false
    [Info] REALITY: processed invalid connection
    ```
-5. **Fix** — rotate `dest` and `serverNames` on both sides
+6. **Fix** — rotate `dest` and `serverNames` on both sides
+
+### macOS client setup (two verified paths)
+
+- **CLI**: `brew install xray` hangs without a proxy (chicken-and-egg) — download `Xray-macos-arm64-v8a.zip` on an already-proxied server and `scp` it back; same JSON config as Linux, no systemctl; files fetched via `scp` carry no quarantine attribute and run directly
+- **GUI**: original ClashX **cannot** do VLESS+Reality — use **ClashX Meta** (mihomo core). Covers config skeleton, port deconfliction (7891/9097 vs 7890/9090), config validation with the bundled core, and the #1 gotcha: **the core only starts after an interactive privileged-helper authorization** — the app looks alive but binds nothing until the user clicks it. Let the app manage the system proxy itself (hand-setting it via `networksetup` will cut your network)
 
 ## Quick start
 
@@ -93,7 +100,7 @@ In Claude Code, ask anything like:
 - "xray connects but SSL_ERROR_SYSCALL"
 - "I'm getting `processed invalid connection` in xray logs"
 
-The skill will guide the agent through diagnosis and fix.
+The skill will guide the agent through diagnosis and fix. On macOS it can also set up a new client from scratch — command-line xray or the ClashX Meta GUI.
 
 ## Why ping is the wrong test
 
@@ -136,10 +143,12 @@ For the full diagnostic flow, see [SKILL.md](./SKILL.md).
 
 ## Tested with
 
-- **xray-core** 1.8.24 (client and server)
-- **mihomo** (Clash Meta)
+- **xray-core** 1.8.24 (client and server) and 26.3.27 (darwin/arm64 client)
+- **mihomo** (Clash Meta) v1.19.28 via **ClashX Meta** v1.4.43 on macOS — same config, same root cause
 - **clash** (premium, classic)
 - **mihomo2** (fork with embedded cache)
+- Xray Reality protocol variants (XTLS-Vision should also work with adjusted `flow`)
+- macOS clients: both command-line xray and GUI (ClashX Meta) paths verified end-to-end
 
 Other proxy stacks (sing-box, Outline, shadowsocks) have different protocols but similar diagnostic flow.
 
