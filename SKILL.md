@@ -337,6 +337,36 @@ Self-healing watchdog (these old init scripts leak duplicate processes on restar
 */2 * * * * pgrep -x ss-redir >/dev/null || /etc/init.d/shadowsocks start
 ```
 
+### Router side (modern OpenWrt 21.02+/23.x, fw4/nftables)
+
+Same architecture, different plumbing. Verified on 23.05.3 (MT7620, 128MB RAM):
+
+- **Client: `shadowsocks-libev` from the OpenWrt feeds** (`opkg install shadowsocks-libev-ss-redir shadowsocks-libev-ss-tunnel`) — the musl-safe choice. shadowsocks-rust publishes **glibc-only** mipsel binaries (useless on OpenWrt's musl); a mihomo binary (~50MB) in tmpfs on a 128MB box is an OOM waiting to happen.
+- **Supervision: procd, not cron.** One `/etc/init.d/ssproxy` (START=99) with two `procd_open_instance` blocks — `ss-redir -c /etc/shadowsocks.json -b 0.0.0.0` and `ss-tunnel -c ... -b 127.0.0.1 -u -l 5353 -L 127.0.0.1:1053` — each with `procd_set_param respawn 3600 5 5`. `/etc/init.d/ssproxy enable` creates the S99 symlink.
+- **nftables, not iptables/ipset.** fw4 auto-includes `/etc/nftables.d/*.nft` inside `table inet fw4`; dnsmasq 2.90+ uses `nftset=` (there is no ipset):
+
+  ```
+  # /etc/nftables.d/99-gfw.nft
+  set gfwlist { type ipv4_addr; flags interval; }
+  chain gfw_prerouting {
+      type nat hook prerouting priority dstnat; policy accept;
+      ip daddr { 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4 } return
+      ip daddr @gfwlist meta l4proto tcp redirect to :1080
+  }
+  chain gfw_output {
+      type nat hook output priority -100; policy accept;   # numeric! 'dstnat' is REJECTED on the output hook
+      oifname "lo" return
+      ip daddr { 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4 } return
+      ip daddr @gfwlist meta l4proto tcp redirect to :1080
+  }
+  ```
+
+- gfwlist file line format becomes `server=/.domain/127.0.0.1#5353` + `nftset=/.domain/4#inet#fw4#gfwlist` (the `4#` = ipv4 family).
+- **`confdir` is load-bearing and its failure is silent.** `/etc/dnsmasq.d/*.conf` is only read when `uci get dhcp.@dnsmasq[0].confdir` is `/etc/dnsmasq.d`. If that option is missing, the generated `/var/etc/dnsmasq.conf.*` falls back to `conf-dir=/tmp/dnsmasq.d` and the ENTIRE gfwlist is ignored — every blocked domain resolves via poisoned ISP DNS while everything else looks perfectly healthy. Verify with `grep conf-dir /var/etc/dnsmasq.conf.*`, never by assuming.
+- **Poisoned AAAA**: if the WAN has no global IPv6, GFW-injected AAAA answers (e.g. Facebook v6 for chatgpt.com) break clients even when A is clean → `uci set dhcp.@dnsmasq[0].filter_aaaa='1'`.
+- **File transfer**: dropbear has **no sftp-server** — plain `scp` fails; use `scp -O` (legacy protocol) or tar-over-ssh. BusyBox has no `base64`, no `blkid` applet on some builds.
+- **Factory recovery**: a fresh OpenWrt (after `firstboot`) accepts SSH root login with an **empty password** — `sshpass -p '' ssh -o PreferredAuthentications=password root@192.168.1.1` gets you in without touching LuCI.
+
 ### Gotchas that WILL bite (all hit in practice)
 
 1. **Dropbear on Chaos Calmer is ancient (2015.67)**: modern OpenSSH clients need `-o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedKeyTypes=+ssh-rsa`. Put them in a `~/.ssh/config` Host block.
@@ -349,6 +379,9 @@ Self-healing watchdog (these old init scripts leak duplicate processes on restar
 8. BusyBox is stripped: no `pgrep -a`, no `hostname`, `pgrep -x` only.
 9. **dnsmasq `killall -HUP` does NOT flush its cache** — it only re-reads config. After fixing upstream DNS you must `/etc/init.d/dnsmasq restart`, or poisoned answers from the ISP-DNS fallback keep getting served for minutes/hours and look exactly like "the fix didn't work".
 10. **GFW poison answers are a zoo, not a pattern**: seen Facebook (31.13.x/157.240.x), Twitter (104.244.x/199.59.x), SoftLayer, and random-cloud IPs injected for blocked domains. Don't "recognize" poisoning by range — verify the real IP via DoH (`curl -H 'accept: application/dns-json' 'https://cloudflare-dns.com/dns-query?name=X&type=A'` through a working proxy) before concluding an answer is fake. (claude.ai's real IP is 160.79.104.10 — looks fake, isn't.)
+11. **OpenWrt config changes that vanish after reboot = rotten jffs2, not ghosts.** Symptom cluster: uci options "lost" between boots, services "not autostarting" despite correct rc.d symlinks, dropbear host key changing every boot (host keys live on the overlay). Diagnose with `dmesg | grep jffs2`: a healthy overlay mounts in ~1-10s; a corrupted one takes 60s+ with `Node header CRC failed` — preinit's `mount_root` gives up (~10s), boots on tmpfs, and the late-mounting jffs2 then discards recent writes at the CRC-bad offsets. Usually caused by a flash-full incident or dirty shutdown, not dying hardware. Cure: back up first (`ssh router "tar -C /overlay -cf - upper" > router-backup.tar` — the overlay holds EVERYTHING: config, host keys, authorized_keys, opkg-installed binaries), then `firstboot -y && reboot` (asks the user first — it factory-resets the router), then restore.
+12. **Ancient/cheap USB sticks can be unreadable ONLY during preinit.** extroot mount fails at boot with `Block bitmap for group 0 overlaps superblock` / `group descriptors corrupted` / `error loading journal` — on a filesystem that mounts perfectly minutes later. The controller returns garbage on early reads; no software fix (`delay_root` is a device-appearance timeout, not a fixed delay; journal-less ext4 doesn't help; fsck finds nothing). Cheap sticks can also wedge the SCSI layer under sustained writes (recover via `echo 0|1 > /sys/bus/usb/devices/1-1/authorized`). Verdict: don't extroot onto old USB 2.0 sticks — keep root on a healthy jffs2 and use the stick for logs/backups at most.
+13. **overlayfs never sees behind-its-back writes.** Restoring a backup tar straight into `/overlay/upper` puts the files on disk, but the running root fs won't show them until a full REBOOT (a `remount` does not refresh the upperdir view). Verify a restore after rebooting, not before — everything looks "missing" otherwise.
 
 ### Per-leg verification commands
 

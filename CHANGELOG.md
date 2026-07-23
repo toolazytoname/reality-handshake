@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Modern OpenWrt router side (21.02+/23.x, fw4): shadowsocks-libev from feeds (musl-safe; shadowsocks-rust is glibc-only, mihomo too big for 128MB RAM), procd init with respawn, `/etc/nftables.d/*.nft` include (numeric priority on the nat output hook), dnsmasq `nftset=` syntax replacing ipset, the silent `confdir` failure (`/var/etc/dnsmasq.conf.*` falls back to `/tmp/dnsmasq.d` and the whole gfwlist is ignored), `filter_aaaa` on IPv4-only WANs, `scp -O` (dropbear has no sftp), factory empty-password SSH recovery
+- New gotchas: **rotten jffs2** = config changes vanish after reboot + services "not autostarting" + host key changes every boot (diagnose via `dmesg | grep jffs2` mount time and CRC errors; cure = tar-over-ssh backup → firstboot → restore); **ancient USB sticks return garbage on preinit reads** (extroot mount fails with "group descriptors corrupted" on a healthy FS — unfixable, keep root on jffs2); **overlayfs never sees behind-its-back writes** (restore into `/overlay/upper` requires a reboot to become visible)
+- RUNBOOK-zh.md: confdir verification one-liner, jffs2 rot diagnosis, full backup/factory-reset/restore procedure
 - Low-end OpenWrt travel router section: transparent proxy when xray can't run on the device (4MB flash / 32MB RAM) — `ss-redir` + mihomo shadowsocks-listener bridge on a domestic relay VPS, the cipher gap (xray dropped stream ciphers vs old ss clients), systemd hardening, dropbear/flash gotchas, per-leg verification commands, reboot acceptance test
 - New gotchas: dnsmasq `killall -HUP` does NOT flush cache (must restart); GFW poison answers come from many ranges (Facebook/Twitter/SoftLayer/cloud IPs) — verify via DoH instead of pattern-matching
 - `RUNBOOK-zh.md` — Chinese ops runbook: changing servers (upstream IP burned / new relay), three-step troubleshooting, optional own-domain upgrade path
