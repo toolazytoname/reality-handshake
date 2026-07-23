@@ -1,6 +1,6 @@
 ---
 name: reality-handshake
-description: Diagnose VLESS+Reality / proxy handshake failures, connect new clients (Linux server, macOS CLI, macOS GUI/ClashX Meta) to an existing Reality server, and build transparent-proxy travel routers on low-end OpenWrt hardware (随身路由器/透明代理) where xray can't run — bridging legacy Shadowsocks clients (aes-256-cfb only) to a modern Reality chain via a gost relay on a domestic VPS. Use PROACTIVELY when user reports "proxy doesn't work", "代理不管用了", "代理失效", curl through proxy returns empty / SSL_ERROR_SYSCALL, ping to a host returns 100% loss (which is NORMAL and not a proxy bug), or asks to put a proxy on a router/OpenWrt/路由器上装代理. Guides through client-side (.bashrc aliases, env vars) and server-side (xray debug logs on the upstream Vultr/host) investigation, fixes the most common cause — dest site banning the server's IP — by rotating dest/serverNames, detects blocked entry IPs (domain IP dead on all ports while the server's other IP works), prefers IPs over free dynamic-DNS names in configs, and sets up macOS clients two ways: command-line xray or ClashX Meta GUI.
+description: Diagnose VLESS+Reality / proxy handshake failures, connect new clients (Linux server, macOS CLI, macOS GUI/ClashX Meta) to an existing Reality server, and build transparent-proxy travel routers on low-end OpenWrt hardware (随身路由器/透明代理) where xray can't run — bridging legacy Shadowsocks clients (aes-256-cfb only) to a modern Reality chain via a mihomo shadowsocks-listener relay on a domestic VPS. Use PROACTIVELY when user reports "proxy doesn't work", "代理不管用了", "代理失效", curl through proxy returns empty / SSL_ERROR_SYSCALL, ping to a host returns 100% loss (which is NORMAL and not a proxy bug), or asks to put a proxy on a router/OpenWrt/路由器上装代理. Guides through client-side (.bashrc aliases, env vars) and server-side (xray debug logs on the upstream Vultr/host) investigation, fixes the most common cause — dest site banning the server's IP — by rotating dest/serverNames, detects blocked entry IPs (domain IP dead on all ports while the server's other IP works), prefers IPs over free dynamic-DNS names in configs, and sets up macOS clients two ways: command-line xray or ClashX Meta GUI.
 ---
 
 # Reality Handshake Debug
@@ -261,21 +261,51 @@ clients ⇵ router (ss-redir, aes-256-cfb) ⇵ domestic relay VPS ⇵ Reality �
 Three legs, each with a distinct job:
 
 1. **Router → domestic relay: Shadowsocks with a legacy cipher.** Old routers ship `shadowsocks-libev` (ss-redir/ss-tunnel) — tiny and already installed. This leg is domestic traffic, so GFW doesn't interfere.
-2. **Relay → upstream: your existing Reality chain, unchanged.** The relay runs its normal mihomo/xray client with a local socks/http inbound.
-3. **The bridge: `gost`.** This is the key trick — see "The cipher gap" below.
+2. **Relay → upstream: your existing Reality chain, unchanged.** The relay runs its normal mihomo/xray client.
+3. **The bridge: mihomo's own shadowsocks inbound** (a `listeners:` entry). This is the key trick — see "The cipher gap" below. No extra software needed if the relay already runs mihomo.
 
 ### The cipher gap (why you can't point ss-redir at xray directly)
 
 - Xray's shadowsocks inbound **dropped all legacy stream ciphers** (aes-256-cfb, chacha20, ...) — AEAD only now.
 - Old router ss clients (e.g. shadowsocks-libev 2.4.5-polarssl on Chaos Calmer) **only have stream ciphers** — no aes-gcm, no chacha20-ietf-poly1305. Check with `ss-redir -h`.
 
-No common cipher ⇒ no direct connection. `gost` bridges it because it still speaks legacy SS on the listen side and socks5 on the forward side:
+No common cipher ⇒ no direct connection. If the relay runs **mihomo**, its built-in shadowsocks inbound still accepts legacy ciphers (aes-256-cfb included) and handles UDP relay natively — add a listener and the bridge is done, zero new software:
 
-```bash
-# On the domestic relay (Aliyun/Tencent Cloud — NOT the foreign upstream):
-gost -L "ss://aes-256-cfb:RANDOM_PASS@:8388" -F "socks5://127.0.0.1:10809"
-#                                                        ^ local mihomo/xray socks inbound
+```yaml
+# On the domestic relay (Aliyun/Tencent Cloud — NOT the foreign upstream),
+# in mihomo config.yaml:
+listeners:
+- name: ss-in
+  type: shadowsocks
+  port: 8388
+  listen: 0.0.0.0
+  cipher: aes-256-cfb
+  password: RANDOM_PASS
+  udp: true
 ```
+
+**gost is NOT a working alternative for UDP.** gost v2's `ss://` TCP listener chains fine (`-F socks5://...`), but its `ssu://` UDP handler is incompatible with shadowsocks-libev clients — every ss-tunnel packet dies with `[ssu] EOF` (verified v2.12.0 ↔ libev 2.4.5, reproduced client-local). If the relay's Reality client is xray (no SS inbound at all), use mihomo just for the SS leg instead.
+
+### mihomo ss-inbound UDP ignores the rule engine (the DNS trap)
+
+Verified on mihomo v1.19.2: UDP packets arriving on a shadowsocks listener **skip all rules and go DIRECT** (`[UDP] x --> 8.8.8.8:53 doesn't match any rule using DIRECT`) — even `DST-PORT,53,proxy` and even though TCP on the same listener matches `MATCH,proxy` correctly. Pointing the router's `ss-tunnel -L` at `8.8.8.8:53` therefore sends DNS out the relay's direct uplink → GFW poisons the answers (chatgpt.com → Facebook/Twitter IPs).
+
+Fix: don't fight the rule engine — aim the tunnel at mihomo's **own DNS module on localhost**, where DIRECT is exactly where the packet needs to go, and let the module resolve via DoH *through* the proxy:
+
+```yaml
+dns:
+  enable: true
+  listen: 127.0.0.1:1053
+  ipv6: false
+  respect-rules: true            # routes the DoH below through the proxy chain
+  proxy-server-nameserver:       # mandatory when respect-rules is on; only used
+  - 223.5.5.5                    #   to resolve proxy-node domains (IP nodes: unused)
+  nameserver:
+  - https://1.1.1.1/dns-query    # IP-literal DoH — no bootstrap resolution needed
+  - https://8.8.8.8/dns-query
+```
+
+Do NOT add a domestic plain-DNS server (223.5.5.5 etc.) to `nameserver` — mihomo races all nameservers and the poisoned fast answer wins for GFW'd domains. The tunnel only ever carries blocked domains anyway (router dnsmasq sends domestic domains to the ISP DNS directly), so DoH-only is correct here. Then on the router: `ss-tunnel -u -l 5353 -L 127.0.0.1:1053` (NOT `-L 8.8.8.8:53`).
 
 ### Why two hops is protection, not fragility
 
@@ -284,20 +314,20 @@ SS traffic is far more fingerprintable than Reality. A home broadband → foreig
 The real fragility is **unmanaged processes**: hand-started proxies in /tmp die with the SSH session. systemd-ize everything on the relay with `Restart=always`:
 
 ```ini
-# /etc/systemd/system/gost-ss.service
+# /etc/systemd/system/mihomo.service
 [Service]
-ExecStart=/usr/local/bin/gost -L "ss://aes-256-cfb:PASS@:8388" -F "socks5://127.0.0.1:10809"
+ExecStart=/usr/local/bin/mihomo -d /etc/mihomo
 Restart=always
 RestartSec=5
 ```
 
-Don't forget the cloud **security group** (Aliyun ECS console): inbound TCP 8388 — the OS firewall being open is not enough.
+Don't forget the cloud **security group** (Aliyun ECS console): inbound **TCP _and_ UDP** 8388 — they're separate rules, and the OS firewall being open is not enough. Forgetting UDP 8388 = TCP browsing works but DNS times out.
 
 ### Router side (legacy OpenWrt, e.g. Chaos Calmer)
 
 Classic transparent-proxy trinity, often already present from a previous owner — audit before rebuilding:
 
-- `/etc/shadowsocks.json` → ss-redir (transparent proxy) + ss-tunnel (DNS → 8.8.8.8:53 via proxy on local 5353)
+- `/etc/shadowsocks.json` → ss-redir (transparent proxy) + ss-tunnel (DNS → relay's mihomo DNS module `127.0.0.1:1053` via SS-UDP on local 5353 — see "the DNS trap" above)
 - `/etc/firewall.user` → `ipset -N gfwlist iphash` + `iptables -t nat -A PREROUTING -p tcp -m set --match-set gfwlist dst -j REDIRECT --to-port 1080` (also `-A OUTPUT` for the router itself)
 - dnsmasq-full + a gfwlist file (`/etc/dnsmasq.d/*.conf`) with `server=/.domain/127.0.0.1#5353` + `ipset=/.domain/gfwlist` pairs — GFW'd domains get unpolluted DNS via the tunnel AND their IPs land in the ipset → redirected through SS. Everything else goes direct (WeChat/Alipay keep a domestic IP — important: foreign IPs trigger account security checks).
 
@@ -317,6 +347,8 @@ Self-healing watchdog (these old init scripts leak duplicate processes on restar
 6. **Write IPs, never free dynamic-DNS names, in proxy configs.** A free hostname (abrdns etc.) silently rotated to a dead third IP and caused "works sometimes" flapping. Reality only needs SNI to match — the `server`/`address` field can be any reachable IP.
 7. **Reboot test is the acceptance test** for a travel router: it must come back with ss-redir + iptables + DNS all working, zero touch. Verify from the WAN side too (`ping <wan-ip>` from another LAN host) in case the LAN cable is unplugged during testing.
 8. BusyBox is stripped: no `pgrep -a`, no `hostname`, `pgrep -x` only.
+9. **dnsmasq `killall -HUP` does NOT flush its cache** — it only re-reads config. After fixing upstream DNS you must `/etc/init.d/dnsmasq restart`, or poisoned answers from the ISP-DNS fallback keep getting served for minutes/hours and look exactly like "the fix didn't work".
+10. **GFW poison answers are a zoo, not a pattern**: seen Facebook (31.13.x/157.240.x), Twitter (104.244.x/199.59.x), SoftLayer, and random-cloud IPs injected for blocked domains. Don't "recognize" poisoning by range — verify the real IP via DoH (`curl -H 'accept: application/dns-json' 'https://cloudflare-dns.com/dns-query?name=X&type=A'` through a working proxy) before concluding an answer is fake. (claude.ai's real IP is 160.79.104.10 — looks fake, isn't.)
 
 ### Per-leg verification commands
 
@@ -324,10 +356,14 @@ Self-healing watchdog (these old init scripts leak duplicate processes on restar
 # Leg 2+3 (on the relay): does the Reality client work? → upstream IP
 curl -s --max-time 15 --socks5-hostname 127.0.0.1:10809 https://api.ipify.org
 
-# Leg 1 (on the relay): does gost accept legacy SS and chain? install ss client locally:
+# Leg 2 (on the relay): does mihomo's SS inbound accept legacy SS? install ss client locally:
 apt-get install -y shadowsocks-libev
 ss-local -s 127.0.0.1 -p 8388 -l 11080 -k 'PASS' -m aes-256-cfb -b 127.0.0.1 &
 curl -s --max-time 20 --socks5-hostname 127.0.0.1:11080 https://api.ipify.org   # → upstream IP
+
+# Leg 1 DNS (on the relay): ss-tunnel UDP → mihomo dns module
+ss-tunnel -s 127.0.0.1 -p 8388 -l 5355 -L 127.0.0.1:1053 -k 'PASS' -m aes-256-cfb -u -b 127.0.0.1 &
+dig @127.0.0.1 -p 5355 chatgpt.com +short   # → real IPs, NOT 31.13.x/157.240.x/104.244.x
 
 # End-to-end (on the router): gfwlisted domain must work via proxy, domestic direct
 wget -q -T 15 -O /dev/null http://www.gstatic.com/generate_204 && echo PROXY-OK
@@ -340,7 +376,7 @@ Throughput expectation on AR9330-class hardware: **~8-15 Mbps** (single 400MHz c
 
 ### When the user wants REAL Reality on a travel router
 
-Need ≥128MB RAM and a modern OpenWrt — e.g. GL.iNet MT300N-V2 class (~¥100 used), then xray's `linux-mipsle`/`linux-mips32` static binary actually fits. That's the upgrade path; the gost bridge is the zero-cost path for hardware already in hand.
+Need ≥128MB RAM and a modern OpenWrt — e.g. GL.iNet MT300N-V2 class (~¥100 used), then xray's `linux-mipsle`/`linux-mips32` static binary actually fits. That's the upgrade path; the relay bridge is the zero-cost path for hardware already in hand.
 
 ## Diagnostic Command Cheat Sheet
 
@@ -395,10 +431,13 @@ proxy on a low-end router (4MB flash / 32MB RAM)?
   ↓
 xray on device is IMPOSSIBLE — don't try
   ↓
-router ss-redir (aes-256-cfb) → gost on DOMESTIC relay →
-  local mihomo/xray socks → Reality upstream (unchanged)
+router ss-redir (aes-256-cfb) → mihomo SS listener on DOMESTIC relay →
+  Reality upstream (unchanged)
   xray dropped stream ciphers; old ss clients have ONLY stream
-  ciphers; gost is the bridge. systemd-ize relay processes.
+  ciphers; mihomo's listeners: shadowsocks inbound bridges both
+  TCP and UDP. ss-tunnel -L must target mihomo's dns module
+  (127.0.0.1:1053) — ss-inbound UDP ignores rules and goes DIRECT.
+  systemd-ize relay processes.
 ```
 
 ## When to Ask User vs Act

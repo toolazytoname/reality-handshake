@@ -37,7 +37,7 @@ The skill walks an AI agent through:
 
 ### Low-end OpenWrt travel router (透明代理随身路由)
 
-When xray physically can't run on the device (4MB flash / 32MB RAM, e.g. TL-WR720N): router `ss-redir` (legacy aes-256-cfb) → **gost bridge on a domestic relay VPS** → existing mihomo/xray client → Reality upstream. Covers the cipher gap (xray dropped stream ciphers; old ss clients have *only* stream ciphers), why the two-hop relay protects the foreign IP instead of adding fragility, dropbear/flash-space gotchas on Chaos Calmer, per-leg verification commands, and a reboot-test acceptance checklist.
+When xray physically can't run on the device (4MB flash / 32MB RAM, e.g. TL-WR720N): router `ss-redir` (legacy aes-256-cfb) → **mihomo shadowsocks listener on a domestic relay VPS** → Reality upstream, zero extra software. Covers the cipher gap (xray dropped stream ciphers; old ss clients have *only* stream ciphers; gost v2's ssu is broken with libev clients), the DNS trap (mihomo ss-inbound UDP ignores the rule engine — aim ss-tunnel at mihomo's own dns module), why the two-hop relay protects the foreign IP instead of adding fragility, dropbear/flash-space gotchas on Chaos Calmer, per-leg verification commands, and a reboot-test acceptance checklist.
 
 For day-to-day operations (changing servers, troubleshooting), see the Chinese runbook: [RUNBOOK-zh.md](./RUNBOOK-zh.md).
 
