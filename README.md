@@ -35,6 +35,12 @@ The skill walks an AI agent through:
 - **CLI**: `brew install xray` hangs without a proxy (chicken-and-egg) — download `Xray-macos-arm64-v8a.zip` on an already-proxied server and `scp` it back; same JSON config as Linux, no systemctl; files fetched via `scp` carry no quarantine attribute and run directly
 - **GUI**: original ClashX **cannot** do VLESS+Reality — use **ClashX Meta** (mihomo core). Covers config skeleton, port deconfliction (7891/9097 vs 7890/9090), config validation with the bundled core, and the #1 gotcha: **the core only starts after an interactive privileged-helper authorization** — the app looks alive but binds nothing until the user clicks it. Let the app manage the system proxy itself (hand-setting it via `networksetup` will cut your network)
 
+### Low-end OpenWrt travel router (透明代理随身路由)
+
+When xray physically can't run on the device (4MB flash / 32MB RAM, e.g. TL-WR720N): router `ss-redir` (legacy aes-256-cfb) → **gost bridge on a domestic relay VPS** → existing mihomo/xray client → Reality upstream. Covers the cipher gap (xray dropped stream ciphers; old ss clients have *only* stream ciphers), why the two-hop relay protects the foreign IP instead of adding fragility, dropbear/flash-space gotchas on Chaos Calmer, per-leg verification commands, and a reboot-test acceptance checklist.
+
+For day-to-day operations (changing servers, troubleshooting), see the Chinese runbook: [RUNBOOK-zh.md](./RUNBOOK-zh.md).
+
 ## Quick start
 
 ### Install — one line

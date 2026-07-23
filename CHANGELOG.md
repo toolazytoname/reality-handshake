@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Low-end OpenWrt travel router section: transparent proxy when xray can't run on the device (4MB flash / 32MB RAM) — `ss-redir` + gost bridge on a domestic relay VPS, the cipher gap (xray dropped stream ciphers vs old ss clients), systemd hardening, dropbear/flash gotchas, per-leg verification commands, reboot acceptance test
+- `RUNBOOK-zh.md` — Chinese ops runbook: changing servers (upstream IP burned / new relay), three-step troubleshooting, optional own-domain upgrade path
+
 ### Planned
 
 - Chinese translation (`SKILL.zh-CN.md`)

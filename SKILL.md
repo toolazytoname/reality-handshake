@@ -1,6 +1,6 @@
 ---
 name: reality-handshake
-description: Diagnose VLESS+Reality / proxy handshake failures, and connect new clients (Linux server, macOS CLI, macOS GUI/ClashX Meta) to an existing Reality server. Use PROACTIVELY when user reports "proxy doesn't work", "代理不管用了", "代理失效", curl through proxy returns empty / SSL_ERROR_SYSCALL, or ping to a host returns 100% loss (which is NORMAL and not a proxy bug). Guides through client-side (.bashrc aliases, env vars) and server-side (xray debug logs on the upstream Vultr/host) investigation, fixes the most common cause — dest site banning the server's IP — by rotating dest/serverNames, detects blocked entry IPs (domain IP dead on all ports while the server's other IP works), and sets up macOS clients two ways: command-line xray or ClashX Meta GUI.
+description: Diagnose VLESS+Reality / proxy handshake failures, connect new clients (Linux server, macOS CLI, macOS GUI/ClashX Meta) to an existing Reality server, and build transparent-proxy travel routers on low-end OpenWrt hardware (随身路由器/透明代理) where xray can't run — bridging legacy Shadowsocks clients (aes-256-cfb only) to a modern Reality chain via a gost relay on a domestic VPS. Use PROACTIVELY when user reports "proxy doesn't work", "代理不管用了", "代理失效", curl through proxy returns empty / SSL_ERROR_SYSCALL, ping to a host returns 100% loss (which is NORMAL and not a proxy bug), or asks to put a proxy on a router/OpenWrt/路由器上装代理. Guides through client-side (.bashrc aliases, env vars) and server-side (xray debug logs on the upstream Vultr/host) investigation, fixes the most common cause — dest site banning the server's IP — by rotating dest/serverNames, detects blocked entry IPs (domain IP dead on all ports while the server's other IP works), prefers IPs over free dynamic-DNS names in configs, and sets up macOS clients two ways: command-line xray or ClashX Meta GUI.
 ---
 
 # Reality Handshake Debug
@@ -248,6 +248,100 @@ Two supported paths. Both verified end-to-end (xray 26.3.27 darwin/arm64, mihomo
 | `/usr/local/etc/xray/config.json` | anywhere, e.g. `~/xray-local/config.json` |
 | quit service | `osascript -e 'quit app "X"'` / `pkill -f` |
 
+## Low-End OpenWrt Travel Router: Transparent Proxy When xray Can't Run
+
+Scenario: user wants a pocket router (e.g. TP-Link TL-WR720N, AR9330 400MHz, **4MB flash / 32MB RAM**) where any phone/laptop that joins its Wi-Fi gets auto-proxied. **Do NOT try to run xray/mihomo/sing-box on the device** — the binary alone (~20-30MB, ~40MB+ RAM under load) exceeds the whole machine. Reality on the router is physically impossible; don't burn time attempting it.
+
+### The architecture that works
+
+```
+clients ⇵ router (ss-redir, aes-256-cfb) ⇵ domestic relay VPS ⇵ Reality ⇵ upstream VPS ⇵ out
+```
+
+Three legs, each with a distinct job:
+
+1. **Router → domestic relay: Shadowsocks with a legacy cipher.** Old routers ship `shadowsocks-libev` (ss-redir/ss-tunnel) — tiny and already installed. This leg is domestic traffic, so GFW doesn't interfere.
+2. **Relay → upstream: your existing Reality chain, unchanged.** The relay runs its normal mihomo/xray client with a local socks/http inbound.
+3. **The bridge: `gost`.** This is the key trick — see "The cipher gap" below.
+
+### The cipher gap (why you can't point ss-redir at xray directly)
+
+- Xray's shadowsocks inbound **dropped all legacy stream ciphers** (aes-256-cfb, chacha20, ...) — AEAD only now.
+- Old router ss clients (e.g. shadowsocks-libev 2.4.5-polarssl on Chaos Calmer) **only have stream ciphers** — no aes-gcm, no chacha20-ietf-poly1305. Check with `ss-redir -h`.
+
+No common cipher ⇒ no direct connection. `gost` bridges it because it still speaks legacy SS on the listen side and socks5 on the forward side:
+
+```bash
+# On the domestic relay (Aliyun/Tencent Cloud — NOT the foreign upstream):
+gost -L "ss://aes-256-cfb:RANDOM_PASS@:8388" -F "socks5://127.0.0.1:10809"
+#                                                        ^ local mihomo/xray socks inbound
+```
+
+### Why two hops is protection, not fragility
+
+SS traffic is far more fingerprintable than Reality. A home broadband → foreign VPS SS link gets the VPS IP burned fast (Reality direct from home already burned it in a day, in practice). The domestic relay means GFW only ever sees home→domestic-VPS; the foreign IP stays hidden. The relay should be a cloud VPS in the user's own country (Aliyun/Tencent), ideally same city — it adds ~2-5ms, the international leg dominates latency anyway.
+
+The real fragility is **unmanaged processes**: hand-started proxies in /tmp die with the SSH session. systemd-ize everything on the relay with `Restart=always`:
+
+```ini
+# /etc/systemd/system/gost-ss.service
+[Service]
+ExecStart=/usr/local/bin/gost -L "ss://aes-256-cfb:PASS@:8388" -F "socks5://127.0.0.1:10809"
+Restart=always
+RestartSec=5
+```
+
+Don't forget the cloud **security group** (Aliyun ECS console): inbound TCP 8388 — the OS firewall being open is not enough.
+
+### Router side (legacy OpenWrt, e.g. Chaos Calmer)
+
+Classic transparent-proxy trinity, often already present from a previous owner — audit before rebuilding:
+
+- `/etc/shadowsocks.json` → ss-redir (transparent proxy) + ss-tunnel (DNS → 8.8.8.8:53 via proxy on local 5353)
+- `/etc/firewall.user` → `ipset -N gfwlist iphash` + `iptables -t nat -A PREROUTING -p tcp -m set --match-set gfwlist dst -j REDIRECT --to-port 1080` (also `-A OUTPUT` for the router itself)
+- dnsmasq-full + a gfwlist file (`/etc/dnsmasq.d/*.conf`) with `server=/.domain/127.0.0.1#5353` + `ipset=/.domain/gfwlist` pairs — GFW'd domains get unpolluted DNS via the tunnel AND their IPs land in the ipset → redirected through SS. Everything else goes direct (WeChat/Alipay keep a domestic IP — important: foreign IPs trigger account security checks).
+
+Self-healing watchdog (these old init scripts leak duplicate processes on restart — `kill -9` leftovers before `start`):
+
+```cron
+*/2 * * * * pgrep -x ss-redir >/dev/null || /etc/init.d/shadowsocks start
+```
+
+### Gotchas that WILL bite (all hit in practice)
+
+1. **Dropbear on Chaos Calmer is ancient (2015.67)**: modern OpenSSH clients need `-o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedKeyTypes=+ssh-rsa`. Put them in a `~/.ssh/config` Host block.
+2. **No ed25519 support** in dropbear 2015.67 — `ssh-copy-id` of your default ed25519 key silently can't work. Use an RSA key.
+3. **OpenWrt dropbear reads `/etc/dropbear/authorized_keys`**, NOT `~/.ssh/authorized_keys` — `ssh-copy-id` puts the key in the wrong place.
+4. **LuCI "Save" ≠ "Save & Apply"** — changes are staged, not live. Symptom: "SSH password auth is enabled but still rejects root".
+5. **4MB flash discipline**: check `df -h /` (may be ~72KB free). Config edits only — no `opkg install`, no file drops.
+6. **Write IPs, never free dynamic-DNS names, in proxy configs.** A free hostname (abrdns etc.) silently rotated to a dead third IP and caused "works sometimes" flapping. Reality only needs SNI to match — the `server`/`address` field can be any reachable IP.
+7. **Reboot test is the acceptance test** for a travel router: it must come back with ss-redir + iptables + DNS all working, zero touch. Verify from the WAN side too (`ping <wan-ip>` from another LAN host) in case the LAN cable is unplugged during testing.
+8. BusyBox is stripped: no `pgrep -a`, no `hostname`, `pgrep -x` only.
+
+### Per-leg verification commands
+
+```bash
+# Leg 2+3 (on the relay): does the Reality client work? → upstream IP
+curl -s --max-time 15 --socks5-hostname 127.0.0.1:10809 https://api.ipify.org
+
+# Leg 1 (on the relay): does gost accept legacy SS and chain? install ss client locally:
+apt-get install -y shadowsocks-libev
+ss-local -s 127.0.0.1 -p 8388 -l 11080 -k 'PASS' -m aes-256-cfb -b 127.0.0.1 &
+curl -s --max-time 20 --socks5-hostname 127.0.0.1:11080 https://api.ipify.org   # → upstream IP
+
+# End-to-end (on the router): gfwlisted domain must work via proxy, domestic direct
+wget -q -T 15 -O /dev/null http://www.gstatic.com/generate_204 && echo PROXY-OK
+wget -q -T 8  -O /dev/null http://www.baidu.com && echo DIRECT-OK
+
+# From a LAN client: gstatic 204 + a domestic IP-echo site showing the home IP
+```
+
+Throughput expectation on AR9330-class hardware: **~8-15 Mbps** (single 400MHz core doing SS crypto + NAT). Fine for phones/browsing, not for speedtests.
+
+### When the user wants REAL Reality on a travel router
+
+Need ≥128MB RAM and a modern OpenWrt — e.g. GL.iNet MT300N-V2 class (~¥100 used), then xray's `linux-mipsle`/`linux-mips32` static binary actually fits. That's the upgrade path; the gost bridge is the zero-cost path for hardware already in hand.
+
 ## Diagnostic Command Cheat Sheet
 
 ```bash
@@ -296,6 +390,15 @@ new client to add?
 macOS CLI    → scp xray from a proxied host, run directly (Path A)
 macOS GUI    → ClashX Meta; original ClashX CANNOT do Reality;
                core needs one interactive helper authorization (Path B)
+
+proxy on a low-end router (4MB flash / 32MB RAM)?
+  ↓
+xray on device is IMPOSSIBLE — don't try
+  ↓
+router ss-redir (aes-256-cfb) → gost on DOMESTIC relay →
+  local mihomo/xray socks → Reality upstream (unchanged)
+  xray dropped stream ciphers; old ss clients have ONLY stream
+  ciphers; gost is the bridge. systemd-ize relay processes.
 ```
 
 ## When to Ask User vs Act
