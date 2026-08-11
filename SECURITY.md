@@ -1,42 +1,59 @@
 # Security Policy
 
-## Authorized use only
+## Authorized use
 
-This skill helps diagnose **legitimate proxy setups** that the user owns and operates. It is **not** a tool for bypassing corporate firewalls, evading law enforcement, or accessing networks you're not authorized to use.
+This project supports proxy systems and routers the operator owns or is authorized to administer. Follow local law and network policy. The workflows are designed for operational privacy and reliability, not unauthorized access.
 
-Use of this skill is governed by the laws of your jurisdiction. The maintainers take no responsibility for misuse.
+## Secrets in this domain
 
-## Reporting vulnerabilities in this repo
+Treat all of these as credentials or sensitive infrastructure metadata:
 
-If you find a real credential leak, an injection vector, or any other security issue in **this repository** (the `SKILL.md`, `README.md`, examples, etc.):
+- airport/subscription URLs and decoded subscription bodies;
+- VLESS UUIDs, passwords, REALITY private/public keys and short IDs;
+- node URIs, endpoints, private SNI/hostnames, and server public IPs;
+- household public IPs, router backups, logs, screenshots, and complete configs.
 
-1. **Do not** open a public GitHub issue
-2. Email `security@toolazytoname.dev` (or your maintainer's preferred contact)
-3. Include: file path, line number, what was leaked, how to reproduce
+A subscription URL is usually a bearer credential: anyone holding it may be able to retrieve the account's node set. Store it in a `0600` file, never in a command line, cron entry, log, screenshot, issue, or Git repository.
 
-We'll respond within 72 hours and coordinate disclosure.
+Public keys and short IDs may not be secret cryptographically, but they identify infrastructure when combined with an endpoint. This project redacts them from public artifacts by default.
 
-## Reporting a real credential leak elsewhere
+## If a secret leaks
 
-If you accidentally committed real credentials to **another** project while using this skill (and they ended up in a public repo):
+1. Rotate or revoke it immediately; do not wait for repository cleanup.
+2. Remove it from the current tree and Git history using an appropriate history-rewrite tool.
+3. Invalidate cached subscription URLs and node credentials where the provider allows it.
+4. Review Actions logs, forks, releases, issue notifications, screenshots, and local clones.
+5. Replace affected router/server configs through the candidate-and-rollback workflow.
 
-1. **Rotate the credentials immediately** (treat as compromised)
-2. Use [`git-filter-repo`](https://github.com/newren/git-filter-repo) or BFG to remove from history
-3. Force-push and notify any forks/clones
-4. See [GitHub's guide on removing sensitive data](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)
+Deleting a file or force-pushing does not recall copies already fetched.
 
-## What this skill does NOT do
+## Reporting a repository vulnerability
 
-- It does **not** exfiltrate credentials from any system
-- It does **not** make outbound connections to attacker-controlled servers
-- All example commands are read-only diagnostics OR explicit, user-confirmed fixes
+Do not open a public issue for a credential leak, command injection, unsafe update path, or rollback failure. Contact the maintainer privately using the security contact configured for the repository. Include only:
 
-## Sanitization
+- affected path and line/commit;
+- sanitized reproduction steps;
+- impact and whether credentials were exposed;
+- suggested containment.
 
-This repo is **scrubbed** of any real credentials, IPs, UUIDs, or domains. Examples use:
+Do not attach the leaked value itself unless a secure channel is explicitly established.
 
-- `127.0.0.1`, `YOUR.UPSTREAM.IP` for IPs
-- `<UUID>`, `xxxxxxxx-xxxx-...` for UUIDs
-- Public domains (`api.ipify.org`, `www.samsung.com`) where safe
+## Repository controls
 
-If you find an actual leak (real IP, real privateKey, real publicKey), please report it per above.
+- `scripts/scan-secrets.sh` catches several common credential shapes before commit/CI.
+- candidate config validation runs with the target Xray command shape;
+- the installer stages all files and switches only after validation;
+- examples use placeholders and documentation excludes real endpoints;
+- updates are expected to validate digest/shape/behavior and retain one rollback copy.
+
+Pattern scanning is defense in depth, not proof that a tree is clean. Human review remains required, especially for encoded/base64 data and images.
+
+## Operational safety
+
+- Start read-only unless a change is authorized.
+- Preserve a wired/console recovery path before router firewall changes.
+- Do not flush unrelated firewall rules.
+- Keep data fail-open and DNS fallback policies separate.
+- Never evaluate decoded subscription text as shell.
+- Use temporary private files, locks, exact-binary validation, atomic rename, smoke tests, and rollback.
+- Restore normal log levels after diagnosis and bound logs on flash storage.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reality 路由与握手运维"
+  short_description: "诊断 Reality，并安全部署路由分流、容灾与订阅更新"
+  default_prompt: "请先只读审计这套 Xray/REALITY 或家庭路由代理，再按候选验证、原子切换和失败回滚的方式完成诊断或配置。"

@@ -9,7 +9,7 @@ Thumbs.db
 *.swo
 *~
 
-# Claude Code local overrides (if anyone copies skill for hacking)
+# Local agent overrides
 CLAUDE.md
 .claude/settings.local.json
 
@@ -19,8 +19,12 @@ CLAUDE.md
 .env
 .env.local
 
-# Build / test artifacts (if we add them later)
+# Build / test artifacts
 dist/
 build/
 *.test
 coverage/
+*.log
+*.tmp
+*.bak
+.reality-handshake.*
