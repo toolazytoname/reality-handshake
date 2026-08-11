@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- GPT Image 2 project-overview hero covering clients, router variants, split DNS, proxy/server paths, validation, health, and rollback
 - FreshTomato/embedded-router transparent-proxy workflow with capability probing, Wi-Fi/LAN safety, TPROXY, boot recovery, FD/log health, and rollback
 - GFW List blocked-only routing and dnsmasq conditional split-DNS guidance
 - Separate data and DNS selectors so approved data fail-open cannot pollute GFW DNS
