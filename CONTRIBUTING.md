@@ -2,54 +2,60 @@
 
 Thanks for improving `reality-handshake`.
 
-## What this skill is
+## Repository layers
 
-A [Claude Code skill](https://docs.claude.com/en/docs/claude-code/skills) that diagnoses VLESS+Reality proxy failures. The `SKILL.md` file is the **only file Claude Code reads** — keep it focused and action-oriented.
+- `SKILL.md` is the short Agent entry and workflow router.
+- `references/` contains detailed Agent runbooks loaded only when relevant.
+- `scripts/` contains deterministic validators and safety checks.
+- `docs/` and `README.md` are written for people.
+- `agents/openai.yaml` is generated Codex interface metadata.
 
-## Submitting changes
+Keep operational detail in the appropriate reference instead of growing `SKILL.md` indefinitely. Human explanations and diagrams belong under `docs/`; do not make an Agent read them to perform a routine task.
 
-1. Fork → branch → PR
-2. Keep `SKILL.md` the source of truth (Claude reads it front-to-back)
-3. Update `README.md` only if the user-facing description changes
-4. **No real credentials, IPs, UUIDs, or domains in any file** — examples should be obviously fictional (`YOUR.UPSTREAM.IP`, `<UUID>`) or universally public (`www.samsung.com`, `api.ipify.org`)
-5. Use the [PR template](./.github/PULL_REQUEST_TEMPLATE.md)
+## Safety requirements
 
-## What makes a good contribution
+1. Never commit subscription URLs, node URIs, UUIDs, passwords, REALITY keys, private domains, public household/server IPs, or unsanitized logs/screenshots.
+2. Treat a subscription response as untrusted input and its URL as a bearer credential.
+3. Every mutation workflow must stage a candidate, validate with the exact target binary, switch atomically, smoke-test, and roll back.
+4. Do not recommend broad firewall flushes or unguarded `sed -i` edits of a live config.
+5. Do not claim a Reality target is blocked from one log line; document evidence and alternative causes.
+6. Technical field semantics should link to current official Xray documentation and mention version sensitivity.
 
-- A new dest site that's known to work (`www.something.com:443`) with a one-line note on why
-- An adaptation to sing-box / shadowsocks / Trojan (parallel `SKILL-<protocol>.md` if the protocol differs significantly)
-- A more accurate interpretation of a specific log line
-- A translation (Chinese, Japanese, Russian all useful for this community)
-- More test cases in `tests/` (if we add a test suite later)
+If a secret has appeared in Git, rotate it immediately. Redacting the latest commit does not remove it from history.
 
-## What to skip
-
-- Cosmetic changes to the diagnostic flow
-- New sections that don't trigger the skill
-- Long prose explanations — Claude reads skills like a checklist
-
-## Testing changes locally
+## Test locally
 
 ```bash
-mkdir -p ~/.claude/skills/reality-handshake
-cp SKILL.md ~/.claude/skills/reality-handshake/SKILL.md
-# Now use Claude Code and trigger the skill with phrases like:
-#   "代理不管用了"
-#   "my xray proxy is broken"
-#   "I'm getting SSL_ERROR_SYSCALL through my SOCKS proxy"
+chmod +x install.sh scripts/*.sh scripts/*.py tests/fake-xray.sh
+./scripts/verify-repo.sh
+./scripts/scan-secrets.sh --self-test
+XRAY_BIN=./tests/fake-xray.sh \
+  ./scripts/validate-xray-candidate.sh tests/fixtures/minimal-config.json
+
+test_dir=$(mktemp -d)
+SOURCE_DIR="$PWD" INSTALL_DIR="$test_dir/reality-handshake" ./install.sh
+test -f "$test_dir/reality-handshake/references/router-deployment.md"
 ```
 
-## Reporting issues
+When the Codex `skill-creator` validator is available, also run:
 
-Open a GitHub issue with:
+```bash
+python3 /path/to/skill-creator/scripts/quick_validate.py .
+```
 
-- The exact error from your `journalctl -u xray` (debug log level)
-- The output of `xray x25519 -i "$(grep privateKey /usr/local/etc/xray/config.json | awk -F'"' '{print $4}')"` (server publicKey, redact if posting publicly)
-- Your client's `realitySettings` block (redact real values)
-- The proxy client you're using (xray, mihomo, clash, sing-box, etc.)
+## What makes a useful contribution
 
-Issue templates auto-load.
+- a reproducible diagnosis with evidence and counterexamples;
+- a safer router recovery or rollback path;
+- version-tested Xray/FreshTomato/OpenWrt behavior;
+- a fixture or deterministic validator for a failure we have seen;
+- clearer human diagrams or maintenance instructions;
+- support for another client/core without weakening secret handling.
 
-## Code of Conduct
+Use the pull-request template and describe both success and failure-path testing.
 
-By participating, you agree to abide by the [Code of Conduct](./CODE_OF_CONDUCT.md).
+## Reporting bugs
+
+Use the issue template. Provide only the relevant redacted lines and versions. Do not post a complete config, `x25519` input/output, subscription content, or server endpoint. Maintainers can ask targeted follow-up questions without receiving secrets.
+
+By participating, you agree to the [Code of Conduct](./CODE_OF_CONDUCT.md).

@@ -20,8 +20,9 @@ assignees: ""
 
 ## Related
 
-- sing-box / shadowsocks / Trojan adaptation?
-- New dest site workaround?
-- Translation?
-- Diagnostic accuracy improvement?
+- FreshTomato / OpenWrt / embedded-router workflow?
+- Xray / Mihomo / sing-box protocol adaptation?
+- Split DNS, routing, observability, or failover?
+- Subscription/rule update safety?
+- Translation or diagnostic accuracy?
 - Other: ____

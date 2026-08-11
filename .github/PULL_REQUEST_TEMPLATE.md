@@ -1,30 +1,31 @@
 ## What this PR does
 
-<!-- 1-3 sentences -->
+<!-- 1–3 sentences. -->
 
-## Type of change
+## Area
 
-- [ ] New dest site workaround
-- [ ] Protocol adaptation (sing-box, shadowsocks, etc.)
-- [ ] Diagnostic accuracy improvement
-- [ ] Translation
-- [ ] Documentation only
-- [ ] Other: ____
+- [ ] Handshake diagnosis
+- [ ] Router / transparent proxy
+- [ ] Split DNS / routing
+- [ ] Resilience / subscription / rule updates
+- [ ] Installer / validation
+- [ ] Human documentation / translation
 
-## Sanitization check (REQUIRED)
+## Safety and sanitization
 
-- [ ] No real IPs in any file (use `YOUR.UPSTREAM.IP` or `<IP>` placeholders)
-- [ ] No real UUIDs in any file (use `<UUID>` placeholder)
-- [ ] No real publicKey / privateKey (use `<PUBLIC_KEY>` / `<PRIVATE_KEY>`)
-- [ ] No real domains pointing to your infrastructure
-- [ ] Only universally public domains used as examples (`www.samsung.com`, `api.ipify.org`, etc.)
+- [ ] Mutations use candidate validation, atomic switch, smoke tests, and rollback.
+- [ ] No subscription URLs, node URIs, UUIDs, keys, tokens, private domains, or real household/server IPs.
+- [ ] Examples use obvious placeholders and do not instruct unguarded edits of live JSON/firewall state.
+- [ ] Logs and screenshots are absent or sanitized.
+- [ ] Current Xray claims link to official documentation or are labeled as observations.
 
-## How I tested
+## Verification
 
-- [ ] Copied `SKILL.md` to `~/.claude/skills/reality-handshake/`
-- [ ] Triggered the skill with: `<phrase>`
-- [ ] Agent followed the new flow correctly
+- [ ] `./scripts/verify-repo.sh`
+- [ ] Candidate validator exercised with the fixture fake binary.
+- [ ] Local atomic installer exercised with `SOURCE_DIR="$PWD"`.
+- [ ] New Mermaid/image links render and resolve.
 
 ## Related issue
 
-<!-- Closes #___ or "N/A" -->
+<!-- Closes #___ or N/A. -->

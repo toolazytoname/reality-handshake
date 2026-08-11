@@ -7,26 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+### Preserved OpenWrt and Mihomo work
 
-- Travel-router bridge replaced: **mihomo `listeners: shadowsocks` inbound** (TCP+UDP, zero extra software) instead of gost. gost v2's `ssu://` UDP handler is incompatible with shadowsocks-libev clients (`[ssu] EOF` on every packet, v2.12.0 ↔ libev 2.4.5); its TCP leg worked but DNS could not be salvaged.
-- Router DNS design: `ss-tunnel -L` now targets **mihomo's own dns module** (`127.0.0.1:1053`, DoH via `respect-rules` through the proxy) instead of `8.8.8.8:53` — mihomo's ss-inbound UDP **ignores the rule engine and goes DIRECT**, so any plain-DNS target gets GFW-poisoned answers.
-- RUNBOOK-zh.md rewritten to match (one mihomo process does SS-inbound + Reality client + DoH DNS; security group needs TCP **and** UDP 8388).
+- Travel-router bridge uses Mihomo's Shadowsocks listener (TCP+UDP) in place of a gost bridge; the companion `RUNBOOK-zh.md` documents the cipher and DNS constraints.
+- Modern OpenWrt/fw4 guidance covers dnsmasq `nftset=`, procd, nftables includes, IPv4-only DNS handling, dropbear/scp compatibility, jffs2 degradation, and extroot recovery boundaries.
+- Added the sanitized Chinese operational runbook for entry-IP changes, relay changes, reboot acceptance, and OpenWrt storage diagnosis.
 
 ### Added
 
-- Modern OpenWrt router side (21.02+/23.x, fw4): shadowsocks-libev from feeds (musl-safe; shadowsocks-rust is glibc-only, mihomo too big for 128MB RAM), procd init with respawn, `/etc/nftables.d/*.nft` include (numeric priority on the nat output hook), dnsmasq `nftset=` syntax replacing ipset, the silent `confdir` failure (`/var/etc/dnsmasq.conf.*` falls back to `/tmp/dnsmasq.d` and the whole gfwlist is ignored), `filter_aaaa` on IPv4-only WANs, `scp -O` (dropbear has no sftp), factory empty-password SSH recovery
-- New gotchas: **rotten jffs2** = config changes vanish after reboot + services "not autostarting" + host key changes every boot (diagnose via `dmesg | grep jffs2` mount time and CRC errors; cure = tar-over-ssh backup → firstboot → restore); **ancient USB sticks return garbage on preinit reads** (extroot mount fails with "group descriptors corrupted" on a healthy FS — unfixable, keep root on jffs2); **overlayfs never sees behind-its-back writes** (restore into `/overlay/upper` requires a reboot to become visible)
-- RUNBOOK-zh.md: confdir verification one-liner, jffs2 rot diagnosis, full backup/factory-reset/restore procedure
-- Low-end OpenWrt travel router section: transparent proxy when xray can't run on the device (4MB flash / 32MB RAM) — `ss-redir` + mihomo shadowsocks-listener bridge on a domestic relay VPS, the cipher gap (xray dropped stream ciphers vs old ss clients), systemd hardening, dropbear/flash gotchas, per-leg verification commands, reboot acceptance test
-- New gotchas: dnsmasq `killall -HUP` does NOT flush cache (must restart); GFW poison answers come from many ranges (Facebook/Twitter/SoftLayer/cloud IPs) — verify via DoH instead of pattern-matching
-- `RUNBOOK-zh.md` — Chinese ops runbook: changing servers (upstream IP burned / new relay), three-step troubleshooting, optional own-domain upgrade path
+- FreshTomato/embedded-router transparent-proxy workflow with capability probing, Wi-Fi/LAN safety, TPROXY, boot recovery, FD/log health, and rollback
+- GFW List blocked-only routing and dnsmasq conditional split-DNS guidance
+- Separate data and DNS selectors so approved data fail-open cannot pollute GFW DNS
+- Xray observatory/multi-node resilience and single-control-plane caveats
+- Defensive airport subscription and geosite/GFW rule refresh transactions
+- Chinese router architecture and operations guides with Mermaid diagrams
+- Two GPT Image 2 architectural illustrations
+- Exact-binary candidate validator, Markdown link checker, secret scanner, and GitHub Actions validation
+- Codex `agents/openai.yaml` metadata and multi-file atomic installer
 
-### Planned
+### Changed
 
-- Chinese translation (`SKILL.zh-CN.md`)
-- sing-box adapter (parallel `SKILL-singbox.md`)
-- More dest site workarounds as the community discovers them
+- Reframed `SKILL.md` as a concise workflow router with progressive references
+- Made all mutation guidance candidate-first, atomic, smoke-tested, and rollback-capable
+- Replaced the definitive “target banned the IP” diagnosis with an evidence-based hypothesis workflow
+- Corrected VLESS+REALITY Vision guidance to match current Xray documentation
+- Updated contribution, issue, pull-request, and security guidance to avoid collecting credentials
+
+### Removed
+
+- Unguarded live `sed -i` configuration edits
+- Claims that `handshakeStatus: false` alone identifies target blocking
+- Claims that `xtls-rprx-vision` should not be used with REALITY
 
 ## [1.0.0] - 2026-06-26
 

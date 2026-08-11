@@ -1,65 +1,130 @@
-#!/usr/bin/env bash
-# install.sh — one-line installer for the reality-handshake Claude Code skill
-#
-# Usage:
-#   curl -fsSL https://raw.githubusercontent.com/toolazytoname/reality-handshake/main/install.sh | sh
-#
-# What it does:
-#   - Downloads SKILL.md from GitHub
-#   - Installs to ~/.claude/skills/reality-handshake/SKILL.md
-#   - No sudo required (user-level install)
-#   - Re-running is safe (overwrites)
-#
-# Options (via env vars):
-#   INSTALL_DIR=/custom/path   — override install directory
-#   BRANCH=main                — override git branch
-#   REPO=owner/name            — override source repo
+#!/bin/sh
+# Atomic installer for the reality-handshake skill.
 
-set -euo pipefail
+set -eu
 
-REPO="${REPO:-toolazytoname/reality-handshake}"
-BRANCH="${BRANCH:-main}"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/.claude/skills/reality-handshake}"
-SKILL_FILE="$INSTALL_DIR/SKILL.md"
-URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/SKILL.md"
+repo=${REPO:-toolazytoname/reality-handshake}
+branch=${BRANCH:-main}
+target=${TARGET:-codex}
+source_dir=${SOURCE_DIR:-}
 
-# Pre-flight checks
-if ! command -v curl >/dev/null 2>&1; then
-  echo "✗ curl not found. Install curl first." >&2
+if [ -n "${INSTALL_DIR:-}" ]; then
+  install_dir=$INSTALL_DIR
+else
+  case "$target" in
+    codex)
+      codex_root=${CODEX_HOME:-"$HOME/.codex"}
+      install_dir="$codex_root/skills/reality-handshake"
+      ;;
+    claude)
+      install_dir="$HOME/.claude/skills/reality-handshake"
+      ;;
+    *)
+      echo "error: TARGET must be 'codex' or 'claude'" >&2
+      exit 2
+      ;;
+  esac
+fi
+
+case "$install_dir" in
+  ""|/|"$HOME"|"$HOME/")
+    echo "error: refusing unsafe INSTALL_DIR: $install_dir" >&2
+    exit 2
+    ;;
+esac
+
+manifest='SKILL.md
+RUNBOOK-zh.md
+agents/openai.yaml
+references/handshake-diagnosis.md
+references/router-deployment.md
+references/resilience-and-subscriptions.md
+references/verification-runbook.md
+scripts/check-markdown-links.py
+scripts/scan-secrets.sh
+scripts/validate-xray-candidate.sh
+scripts/verify-repo.sh'
+
+if [ -z "$source_dir" ]; then
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "error: curl is required for a remote install" >&2
+    exit 1
+  fi
+  if ! command -v tar >/dev/null 2>&1; then
+    echo "error: tar is required for a remote install" >&2
+    exit 1
+  fi
+fi
+
+install_parent=$(dirname "$install_dir")
+mkdir -p "$install_parent"
+stage_dir=$(mktemp -d "$install_parent/.reality-handshake.install.XXXXXX")
+payload_dir="$stage_dir/payload"
+mkdir -p "$payload_dir"
+
+cleanup() {
+  rm -rf "$stage_dir"
+}
+trap cleanup EXIT HUP INT TERM
+
+echo "staging reality-handshake for $target ..."
+if [ -z "$source_dir" ]; then
+  source_dir="$stage_dir/source"
+  archive_file="$stage_dir/source.tar.gz"
+  mkdir -p "$source_dir"
+  archive_url="https://codeload.github.com/$repo/tar.gz/refs/heads/$branch"
+  if ! curl -fsSL --retry 2 --connect-timeout 10 "$archive_url" -o "$archive_file"; then
+    echo "error: download failed: $repo@$branch" >&2
+    exit 1
+  fi
+  if ! tar -xzf "$archive_file" -C "$source_dir" --strip-components=1; then
+    echo "error: downloaded repository archive is invalid" >&2
+    exit 1
+  fi
+fi
+
+for relative_path in $manifest; do
+  destination="$payload_dir/$relative_path"
+  mkdir -p "$(dirname "$destination")"
+  source_path="$source_dir/$relative_path"
+  if [ ! -f "$source_path" ]; then
+    echo "error: source file missing: $source_path" >&2
+    exit 1
+  fi
+  cp "$source_path" "$destination"
+done
+
+if [ "$(sed -n '1p' "$payload_dir/SKILL.md")" != '---' ]; then
+  echo "error: staged SKILL.md is missing YAML frontmatter" >&2
   exit 1
 fi
 
-if [[ -d "$HOME/.claude/skills" && ! -w "$HOME/.claude/skills" ]]; then
-  echo "✗ $HOME/.claude/skills exists but is not writable." >&2
-  echo "  Try: INSTALL_DIR=\$HOME/somewhere/writable $0" >&2
+if ! grep -q '^name: reality-handshake$' "$payload_dir/SKILL.md"; then
+  echo "error: staged skill has an unexpected name" >&2
   exit 1
 fi
 
-# Install
-mkdir -p "$INSTALL_DIR"
+chmod 755 "$payload_dir/scripts/"*.sh "$payload_dir/scripts/"*.py
 
-echo "→ Downloading SKILL.md from $REPO@$BRANCH ..."
-if ! curl -fsSL "$URL" -o "$SKILL_FILE"; then
-  echo "✗ Download failed. Check your network and that $REPO@$BRANCH exists." >&2
+backup_dir="${install_dir}.previous.$$"
+had_previous=0
+if [ -e "$install_dir" ]; then
+  mv "$install_dir" "$backup_dir"
+  had_previous=1
+fi
+
+if mv "$payload_dir" "$install_dir"; then
+  if [ "$had_previous" -eq 1 ]; then
+    rm -rf "$backup_dir"
+  fi
+else
+  echo "error: install switch failed; restoring previous skill" >&2
+  if [ "$had_previous" -eq 1 ] && [ -e "$backup_dir" ]; then
+    mv "$backup_dir" "$install_dir"
+  fi
   exit 1
 fi
 
-# Verify it looks like a real SKILL.md (frontmatter check)
-if ! head -1 "$SKILL_FILE" | grep -q "^---$"; then
-  echo "✗ Downloaded file doesn't look like a SKILL.md (missing YAML frontmatter)." >&2
-  echo "  Saved (just in case) to: $SKILL_FILE" >&2
-  exit 1
-fi
-
-# Show what we installed
-SIZE=$(wc -c < "$SKILL_FILE" | tr -d ' ')
-echo "✓ reality-handshake installed to $SKILL_FILE ($SIZE bytes)"
-echo ""
-echo "Try it. In Claude Code, ask anything like:"
-echo "  • 代理不管用了"
-echo "  • my proxy is broken"
-echo "  • I'm getting SSL_ERROR_SYSCALL through my SOCKS proxy"
-echo "  • xray shows 'processed invalid connection' in debug log"
-echo ""
-echo "Uninstall:"
-echo "  rm -rf '$INSTALL_DIR'"
+file_count=$(find "$install_dir" -type f | wc -l | tr -d ' ')
+echo "installed reality-handshake to $install_dir ($file_count files)"
+echo "Try: 先只读检查我的 Xray/REALITY 或路由器代理，不要改配置。"

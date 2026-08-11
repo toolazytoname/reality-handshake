@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Something didn't work when using the skill
+about: A workflow, document, installer, or validator did not work
 title: "[BUG] "
 labels: bug
 assignees: ""
@@ -8,39 +8,32 @@ assignees: ""
 
 ## What happened
 
-<!-- Brief description -->
+<!-- Describe the expected and actual result. Never paste a full subscription or config. -->
 
-## What you ran (redact credentials!)
+## Workflow and step
 
-```bash
-# Your command / conversation with the skill
-```
+- Workflow: handshake / router / DNS / subscription / rule update / installer
+- Document heading or script:
 
-## What the agent did (redact!)
+## Sanitized evidence
 
-```
-Paste the agent's diagnostic output here
+<!-- Keep only the few relevant lines. Replace addresses, UUIDs, keys, SNI and URLs. -->
+
+```text
+REDACTED
 ```
 
 ## Environment
 
-- xray-core version: `xray version` output
-- Client software: xray / mihomo / clash / mihomo2 / other
-- OS: `uname -a`
+- Xray version:
+- Router/client software:
+- OS/firmware and architecture:
+- Install method and branch:
 
-## Server debug log (loglevel: debug)
+## Safety checklist
 
-```bash
-# On the upstream server
-sed -i 's/"loglevel": "warning"/"loglevel": "debug"/' /usr/local/etc/xray/config.json
-systemctl restart xray
-journalctl -u xray -n 50 --no-pager
-```
-
-Paste the relevant portion (redact IPs/UUIDs/keys if you care).
-
-## Checklist
-
-- [ ] I retried with `loglevel: "debug"` on the server
-- [ ] I checked [Step 5 in SKILL.md](./SKILL.md#step-5-other-common-causes-in-priority-order) — none of those matched
-- [ ] I redacted my real publicKey/privateKey/UUID/server IP from this issue
+- [ ] I did not include a subscription URL or node URI.
+- [ ] I removed UUIDs, keys, tokens, server/household public IPs, and private domains.
+- [ ] I did not paste a complete Xray/Mihomo/Clash configuration.
+- [ ] I tested with an HTTP request, not only `ping`.
+- [ ] I identified whether the failure is data, DNS, process, or handshake related.

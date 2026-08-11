@@ -1,0 +1,36 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  skill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Verify repository
+        run: ./scripts/verify-repo.sh
+      - name: Exercise secret scanner
+        run: ./scripts/scan-secrets.sh --self-test
+      - name: Exercise candidate validator
+        env:
+          XRAY_BIN: ./tests/fake-xray.sh
+        run: ./scripts/validate-xray-candidate.sh tests/fixtures/minimal-config.json
+      - name: Exercise local atomic installer
+        env:
+          SOURCE_DIR: ${{ github.workspace }}
+          INSTALL_DIR: ${{ runner.temp }}/reality-handshake
+        run: |
+          ./install.sh
+          test -f "$INSTALL_DIR/references/router-deployment.md"
+          test -x "$INSTALL_DIR/scripts/validate-xray-candidate.sh"
