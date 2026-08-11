@@ -8,7 +8,9 @@
 [![Validation](https://github.com/toolazytoname/reality-handshake/actions/workflows/validate.yml/badge.svg)](https://github.com/toolazytoname/reality-handshake/actions/workflows/validate.yml)
 [![Xray docs](https://img.shields.io/badge/Xray-current%20docs-blue)](https://xtls.github.io/en/config/)
 
-![家庭路由器分流与多出口架构](./docs/assets/reality-router-architecture.png)
+![reality-handshake 工程全景：客户端、路由器、分流 DNS、节点池、服务端、验证更新与回滚](./docs/assets/project-overview.png)
+
+这张总览图从左到右覆盖客户端接入、FreshTomato / OpenWrt / 低端路由桥接、分流策略与 DNS、多节点及自建备用、Xray REALITY 服务端；底部是贯穿所有场景的候选验证、原子切换、健康检查与回滚。
 
 ## 它现在能做什么
 
@@ -23,6 +25,8 @@
 - 把运行维护沉淀为状态、直连/代理、重启、日志、更新、回滚等固定操作。
 
 ## 设计全景
+
+下面的确定性流程图聚焦家庭路由的数据与 DNS 路径；完整工程范围见上方总览图。
 
 ```mermaid
 flowchart LR
