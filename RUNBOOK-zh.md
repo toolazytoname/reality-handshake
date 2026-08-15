@@ -171,6 +171,9 @@ upstream.你的域名 → 境外服务器 IP
 
 注意：
 - 免费动态域名（如 abrdns 之类）**不要用于此用途**——它的 IP 会被悄悄轮换，造成"时好时坏"的灵异故障（真实踩过）
+- **国内中继上的 Clash/Mihomo 把 `server` 写成这类域名时**，常见表现不是 Xray 挂了，而是：服务端 `8443` 在听、客户端对**真实 IP:8443** 的 TCP 是通的，但该域名在中继上 **解析失败或解析到别的地址**；Clash 延迟 Timeout，走 mixed-port（常见 `127.0.0.1:7890`）访问 GitHub 报 `SSL_ERROR_SYSCALL`。先 `getent hosts <Clash 里的 server>`，再 `timeout 5 bash -c 'echo >/dev/tcp/<已知服务端IP>/8443'`，两步对不上就改 `server` 为固定公网 IP（Reality 只认 SNI，拨号地址可以是 IP）
+- 系统里的 `proxy-on` 若指向 `10808` 而 Clash 实际 mixed-port 是 `7890`，等于没走代理。以 `ss -lnt` 为准
+- Clash Meta 可用 `PUT /configs?force=true` 热加载候选人配置（无 root 时救急）；**不会改掉 `/etc/clash/config.yaml`**，进程一重启会回到磁盘上的旧域名，必须再做一次特权写盘
 - 域名只做 DNS 解析用，不出现在流量的 SNI 里，被针对的风险很低
 - Reality 协议本身只认 SNI（serverName），配置里的 server 写 IP 还是域名都行
 

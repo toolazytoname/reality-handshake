@@ -1,6 +1,6 @@
 ---
 name: reality-handshake
-description: Diagnose, deploy, and maintain authorized Xray VLESS+REALITY proxy paths, including client/server handshake failures, macOS/Linux client onboarding, FreshTomato or OpenWrt transparent proxying, legacy low-end router Shadowsocks-to-Mihomo bridges, GFW-list split routing and split DNS, multi-node health selection, fail-open behavior, subscription refresh, rollback, and boot-time recovery. Use when a user reports a broken Reality/Mihomo/Clash proxy, asks to connect a client or make household/travel-router devices use a proxy, or wants a resilient low-maintenance setup without exposing credentials.
+description: Diagnose, deploy, and maintain authorized Xray VLESS+REALITY proxy paths, including client/server handshake failures, Clash Meta mixed-port Timeout or SSL_ERROR_SYSCALL when `server:` is a free DDNS hostname, macOS/Linux client onboarding, FreshTomato or OpenWrt transparent proxying, legacy low-end router Shadowsocks-to-Mihomo bridges, GFW-list split routing and split DNS, multi-node health selection, fail-open behavior, subscription refresh, rollback, and boot-time recovery. Use when a user reports a broken Reality/Mihomo/Clash proxy, asks to connect a client or make household/travel-router devices use a proxy, or wants a resilient low-maintenance setup without exposing credentials.
 ---
 
 # Reality Handshake and Router Operations
@@ -21,6 +21,7 @@ Operate only systems the user owns or is authorized to administer. Prefer a reve
 ## Select the workflow
 
 - Broken local client, proxy port, or Reality handshake: read [references/handshake-diagnosis.md](references/handshake-diagnosis.md).
+- Clash/Mihomo mixed-port Timeout, `SSL_ERROR_SYSCALL` through `7890`, or a free DDNS hostname as `server:`: read [references/handshake-diagnosis.md](references/handshake-diagnosis.md) section 8 (hostname vs TCP).
 - Embedded router, FreshTomato, transparent proxy, split routing/DNS, boot scripts, or constrained ARM hardware: read [references/router-deployment.md](references/router-deployment.md).
 - macOS client onboarding, blocked entry-IP diagnosis, modern OpenWrt/fw4, or a low-end OpenWrt router that must bridge legacy Shadowsocks to a Mihomo/REALITY relay: read [RUNBOOK-zh.md](RUNBOOK-zh.md) in full, then apply the universal safety transaction below.
 - Multiple nodes, observatory, fail-open, subscriptions, rule updates, scheduled health checks, or rollback: read [references/resilience-and-subscriptions.md](references/resilience-and-subscriptions.md).

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Handshake diagnosis: Clash Meta `server:` on free DDNS (including `abrdns`) can fail to resolve from a domestic relay while TCP to the real inbound still works; mixed-port Timeout / `SSL_ERROR_SYSCALL` is not proof that Xray is down.
+- Clash Meta API hot-reload (`PUT /configs?force=true`) is memory-only; on-disk yaml must still be updated for persistence. Stale `proxy-on` SOCKS aliases vs mixed-port `7890`.
+
 ### Preserved OpenWrt and Mihomo work
 
 - Travel-router bridge uses Mihomo's Shadowsocks listener (TCP+UDP) in place of a gost bridge; the companion `RUNBOOK-zh.md` documents the cipher and DNS constraints.

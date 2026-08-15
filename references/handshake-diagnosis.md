@@ -45,11 +45,13 @@ Locate the active configuration from the process arguments or service definition
 
 Check for:
 
-- inbound address and port matching the application;
+- inbound address and port matching the application (Clash Meta mixed-port is often `127.0.0.1:7890`; SOCKS may be absent);
 - another core already owning the port;
-- proxy environment variables pointing at a stale port;
+- proxy environment variables or shell aliases pointing at a stale port (a `proxy-on` alias for `socks5://127.0.0.1:10808` is useless if that port is not listening);
 - DNS mode differences between the application and command-line test;
 - a client clock outside the server's accepted range.
+
+Clash/Mihomo API fields are easy to misread: `GLOBAL.now=DIRECT` is not the same as the operator `proxy` group's `now`. Query the named group and `secure-proxy` (or equivalent) `alive`/`delay`. Do not diagnose the HTTP mixed-port with `ping`.
 
 ## 4. Read-only server audit
 
@@ -119,7 +121,29 @@ Then:
 
 Never use an unguarded `sed -i` against production JSON.
 
-## 8. Other frequent causes
+## 8. Hostname vs TCP (free DDNS as Clash `server`)
+
+This pattern showed up on a domestic VPS Clash Meta client talking to an overseas Xray REALITY inbound:
+
+| Observation | Meaning |
+| --- | --- |
+| `xray` is `active` and `*:8443` is listening | Server process is up |
+| Client TCP to the **known** server address on 8443 succeeds (WAN and/or Tailscale) | Port, firewall, and path are fine |
+| `getent hosts` / DNS for the hostname in Clash `server:` fails or answers a **different** address than the server | The client never reaches Xray |
+| Clash delay API returns Timeout; `curl -x http://127.0.0.1:7890 https://github.com` dies with `SSL_ERROR_SYSCALL` | Mixed-port is up; the selected outbound node is dead because it cannot resolve/dial `server` |
+| Client and server clocks match; `shortId` is in `shortIds`; `serverName` is in `serverNames`; dest TLS from the server works | Not clock skew, not an obvious credential/SNI/dest failure |
+
+REALITY authenticates SNI (`serverName` / `serverNames`), not the `server` dial address. The dial address may be a stable public IP or a Tailscale name. Free dynamic DNS (including `abrdns`-style names) can rotate, split-horizon, or fail to resolve from the domestic VPS even while the real IP:8443 still accepts TCP.
+
+**Confirm without printing addresses:** hash the DNS A record and the server's known public address; compare hashes and a boolean `dns_matches_server`. Compare `shortId` membership with a boolean, not by dumping the list.
+
+**Fix:** change only Clash `server:` from the DDNS hostname to the fixed public IP (or a domain the operator controls). Backup the yaml, edit a candidate (`0600`), smoke-test, then persist.
+
+**Clash Meta without root:** `PUT http://127.0.0.1:9090/configs?force=true` with `{"path":"<candidate.yaml>"}` hot-reloads (HTTP 204). Root can read a `0600` candidate in a user home directory. **This does not write `/etc/clash/config.yaml`.** A Clash restart reloads the on-disk file and reverts. Record that persistence still needs a privileged write.
+
+After reload, require: group `alive=true`, delay API a number not Timeout, `curl -x http://127.0.0.1:7890` to `https://www.gstatic.com/generate_204` → 204, and one ordinary HTTPS site → 200. Do not print egress IPs.
+
+## 9. Other frequent causes
 
 - WAN or DNS is down before Xray starts.
 - Server port is closed or forwarded to the wrong host.
@@ -130,8 +154,9 @@ Never use an unguarded `sed -i` against production JSON.
 - A stale service instance still owns the inbound port.
 - File descriptor exhaustion causes intermittent accepts or dials.
 - The application retained a polluted DNS answer after the proxy was fixed.
+- Clash `server:` is a free DDNS hostname that does not resolve (or resolves elsewhere) from the client, while TCP to the real inbound still works. See section 8.
 
-## 9. Completion evidence
+## 10. Completion evidence
 
 Do not declare success until:
 
