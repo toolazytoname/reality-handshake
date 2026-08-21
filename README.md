@@ -23,6 +23,7 @@
 - 通过 Xray observatory 与多节点选择提高可用性；数据流可按用户选择 fail-open，GFW DNS 始终保持代理路径。
 - 安全刷新机场订阅和 geosite/GFW 规则：源未变化不重启，候选先测试，切换失败自动回滚，只保留当前与一个备份。
 - 把运行维护沉淀为状态、直连/代理、重启、日志、更新、回滚等固定操作。
+- 把一台长期开机的 macOS/Linux 电脑做成 Mihomo TUN 规则客户端（命令行无需每次开代理），并与 Tailscale 共存；文档见 [常驻客户端场景](docs/macos-always-on-client.zh-CN.md)。
 
 ## 设计全景
 
@@ -98,7 +99,9 @@ Agent 会从 [SKILL.md](./SKILL.md) 选择对应流程，并按“只读证据 �
 - [FreshTomato 家庭路由器完整方案](./docs/router-guide.zh-CN.md)：架构、GFW 分流、DNS、容灾、订阅与定时任务。
 - [诊断、验收与日常维护](./docs/operations.zh-CN.md)：为什么不能用 ping、如何查故障、如何恢复和月度维护。
 - [OpenWrt / macOS / 低端旅行路由运行手册](./RUNBOOK-zh.md)：fw4/nftables、mihomo Shadowsocks listener、入口 IP、macOS 与存储故障。
+- [常驻 macOS / Linux 客户端](./docs/macos-always-on-client.zh-CN.md)：Mihomo TUN、与 Tailscale 共存、屏幕共享端口、合盖与关屏。
 - [Agent：握手诊断](./references/handshake-diagnosis.md)
+- [Agent：常驻客户端](./references/macos-always-on-client.md)
 - [Agent：嵌入式路由部署](./references/router-deployment.md)
 - [Agent：容灾与订阅刷新](./references/resilience-and-subscriptions.md)
 - [Agent：验收与回滚](./references/verification-runbook.md)
@@ -147,7 +150,7 @@ flowchart LR
 ├── agents/openai.yaml               # Codex 展示元数据
 ├── references/                      # Agent 详细运行手册
 ├── scripts/                         # 候选验证、链接与秘密扫描
-├── docs/                             # 中文人类文档与插图
+├── docs/                             # 中文人类文档与插图（含常驻 macOS/Linux 客户端）
 ├── RUNBOOK-zh.md                      # OpenWrt、macOS 与低端旅行路由运行手册
 ├── install.sh                        # 原子安装器
 └── .github/workflows/validate.yml    # 基础验证

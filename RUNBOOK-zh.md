@@ -94,6 +94,14 @@ killall -9 ss-redir ss-tunnel 2>/dev/null; sleep 1
 
 ---
 
+## 场景 C：常驻电脑当客户端（macOS / Linux）
+
+家庭路由透明代理之外，也可以让一台长期开机的电脑自己跑 Mihomo TUN。命令行不必每次 `export http_proxy`。与 Tailscale 同时开时，用更长的 `100.64.0.0/10` 路由 + `inet4-route-exclude-address` 避免打架。
+
+完整步骤、权限（macOS 必须 root/Helper 才能建 TUN）、屏幕共享端口、合盖/关屏见 [docs/macos-always-on-client.zh-CN.md](docs/macos-always-on-client.zh-CN.md)。Linux 用 systemd 跑同一份规则配置即可。
+
+---
+
 ## 日常排障三板斧
 
 ```bash

@@ -1,6 +1,6 @@
 ---
 name: reality-handshake
-description: Diagnose, deploy, and maintain authorized Xray VLESS+REALITY proxy paths, including client/server handshake failures, macOS/Linux client onboarding, FreshTomato or OpenWrt transparent proxying, legacy low-end router Shadowsocks-to-Mihomo bridges, GFW-list split routing and split DNS, multi-node health selection, fail-open behavior, subscription refresh, rollback, and boot-time recovery. Use when a user reports a broken Reality/Mihomo/Clash proxy, asks to connect a client or make household/travel-router devices use a proxy, or wants a resilient low-maintenance setup without exposing credentials.
+description: Diagnose, deploy, and maintain authorized Xray VLESS+REALITY proxy paths, including client/server handshake failures, macOS/Linux client onboarding, always-on Mihomo TUN mini hosts with Tailscale, FreshTomato or OpenWrt transparent proxying, legacy low-end router Shadowsocks-to-Mihomo bridges, GFW-list split routing and split DNS, multi-node health selection, fail-open behavior, subscription refresh, rollback, and boot-time recovery. Use when a user reports a broken Reality/Mihomo/Clash proxy, asks to connect a client or make household/travel-router devices use a proxy, or wants a resilient low-maintenance setup without exposing credentials.
 ---
 
 # Reality Handshake and Router Operations
@@ -23,6 +23,7 @@ Operate only systems the user owns or is authorized to administer. Prefer a reve
 - Broken local client, proxy port, or Reality handshake: read [references/handshake-diagnosis.md](references/handshake-diagnosis.md).
 - Embedded router, FreshTomato, transparent proxy, split routing/DNS, boot scripts, or constrained ARM hardware: read [references/router-deployment.md](references/router-deployment.md).
 - macOS client onboarding, blocked entry-IP diagnosis, modern OpenWrt/fw4, or a low-end OpenWrt router that must bridge legacy Shadowsocks to a Mihomo/REALITY relay: read [RUNBOOK-zh.md](RUNBOOK-zh.md) in full, then apply the universal safety transaction below.
+- Always-on Mac/Linux mini host, Mihomo TUN plus Tailscale, display/lid power, or “CLI forgot http_proxy”: read [references/macos-always-on-client.md](references/macos-always-on-client.md) and [docs/macos-always-on-client.zh-CN.md](docs/macos-always-on-client.zh-CN.md).
 - Multiple nodes, observatory, fail-open, subscriptions, rule updates, scheduled health checks, or rollback: read [references/resilience-and-subscriptions.md](references/resilience-and-subscriptions.md).
 - Before handoff or after a risky change: read [references/verification-runbook.md](references/verification-runbook.md).
 

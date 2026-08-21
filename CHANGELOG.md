@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Always-on macOS/Linux Mihomo TUN client scenario (Tailscale coexistence, no daily `http_proxy`, display/lid power notes) in `docs/macos-always-on-client.zh-CN.md` and `references/macos-always-on-client.md`.
+
 ### Preserved OpenWrt and Mihomo work
 
 - Travel-router bridge uses Mihomo's Shadowsocks listener (TCP+UDP) in place of a gost bridge; the companion `RUNBOOK-zh.md` documents the cipher and DNS constraints.
