@@ -75,6 +75,14 @@ flowchart TD
 
 检查 Xray 进程和监听、节点观测结果、机场订阅是否过期、文件描述符、系统时间。逐节点隔离测试真实 HTTPS，不要只测 TCP 端口。
 
+本机如果开着 TUN 并且排除了局域网，浏览器能上 Google **不能**证明路由器透明代理活着。去问路由器 DNS，或用一台不走 TUN 的 LAN 设备。
+
+### 进程起不来，日志是 address already in use
+
+在 Linux 2.6.x 的 TPROXY 上，这经常不是“有个进程占着端口”。`netstat` 和 `/proc/net` 都可以是空的，换一个 TPROXY 端口却能立刻听上去。这是幽灵套接字假说：杀进程后内核仍占着 bind。
+
+不要每 5 分钟对同一端口 `kill` + `bind`。启动失败必须收尸；连续失败后要降频；把当前 TPROXY 端口写成持久文件，让防火墙、健康检查、订阅生成器读同一处。详情见 [TPROXY ghost sockets](../references/tproxy-ghost-socket.md)。
+
 ### 重启后短暂污染 DNS
 
 重点检查 DNS 专用选择器是否在观测器冷启动时回退了 direct。修复为固定代理或代理池内回退，重启 dnsmasq/Xray 后清除客户端 DNS 缓存。
