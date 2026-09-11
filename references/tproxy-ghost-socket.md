@@ -84,6 +84,7 @@ FreshTomato and similar firmware rate-limit SSH logins. Repeated `ssh host 'cmd'
 - Ship one payload and one idempotent deploy script per change: `tar cf - files | ssh host 'cd /tmp/stage && tar xf - && sh deploy.sh'`.
 - Put verification inside the deploy script; do not open a second session to “check”.
 - Do not use `ControlMaster`/`ControlPersist` from an automation harness. The background master keeps stdout open and the caller waits forever.
+- If you add a phone push (Bark or similar) to the alert path, send it synchronously with a short timeout. A backgrounded `curl … &` dies with the parent shell when the SSH session ends, so the push that "should have worked" never leaves the box. Verify the device key from the phone app itself; a key copied through several `.env` files can pick up a non-ASCII look-alike character that the server rejects with 400.
 - Xray infers config format from the file extension. Staged candidates must end in `.json`, or `xray run -test` fails with “Failed to get format” and the swap looks like a config error.
 
 ## Acceptance after recovery
