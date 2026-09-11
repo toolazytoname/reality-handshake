@@ -188,7 +188,9 @@ stateDiagram-v2
 
 FreshTomato 的 init/firewall/wan-up 入口只调用 `/jffs` 下的短脚本。完整规则不要塞进 NVRAM。启动时等待 WAN 与 DNS 可用，再启动 Xray、安装幂等防火墙、重建 cron。
 
-所有更新和重启共享一个锁，避免月度规则更新、订阅更新和健康脚本同时改配置。
+所有更新和重启共享一个锁，避免月度规则更新、订阅更新和健康脚本同时改配置。锁如果是 `mkdir` 出来的目录，开机必须 `rmdir`；`rm -f` 删不掉目录，之后所有控制命令都会拿不到锁。
+
+不要假定 TPROXY 端口写死在脚本里就安全。Linux 2.6.x 上杀进程后可能留下用户态看不见的 bind（`EADDRINUSE` 但 `netstat` 为空）。健康检查若只重启同一端口，会静默停几周。TPROXY 端口、iptables `--on-port`、订阅模板必须同一来源，并给 `address already in use` 留一次换端口逃生。详见 [TPROXY ghost sockets](../references/tproxy-ghost-socket.md)。
 
 ## 存储与日志
 

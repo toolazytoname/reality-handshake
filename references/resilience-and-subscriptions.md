@@ -156,8 +156,13 @@ Distinguish node failure from process failure:
 - one node fails: observatory removes it from selection;
 - every node fails but Xray is healthy: apply the user's data fail-open/closed policy; keep GFW DNS proxy-only;
 - PID/listener fails: restart Xray;
-- repeated process/config failures: restore the known-good config, temporarily disable transparent interception if approved, and keep LAN/WAN available;
+- `EADDRINUSE` with no visible listener: do not keep binding the same TPROXY port; switch to a pre-declared candidate or enter `stuck` and alert. See [tproxy-ghost-socket.md](tproxy-ghost-socket.md);
+- repeated process/config failures: restore the known-good config, temporarily disable transparent interception if approved, keep LAN/WAN available, and slow the restart cadence (hourly after three failures, not every five minutes);
 - storage full or checksum failure: do not mutate; alert with redacted evidence.
+
+Health must have an operator-visible exit: a file such as `/tmp/xray-alert` plus `logger` at 3 / 12 / 288 consecutive failures. Empty `logread` is not an excuse for a multi-week silent `direct` state.
+
+The TPROXY port used in `config.json`, iptables `--on-port`, health listener checks, and subscription rendering must come from one persistent file. A refresh job that hard-codes the old port will undo a port-escape hot-fix.
 
 ## Manual operations to provide
 

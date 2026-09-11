@@ -47,6 +47,7 @@ Check for:
 
 - inbound address and port matching the application (Clash Meta mixed-port is often `127.0.0.1:7890`; SOCKS may be absent);
 - another core already owning the port;
+- `EADDRINUSE` with empty `ss`/`netstat` on an old-kernel TPROXY inbound: see [tproxy-ghost-socket.md](tproxy-ghost-socket.md), not a config-test failure;
 - proxy environment variables or shell aliases pointing at a stale port (a `proxy-on` alias for `socks5://127.0.0.1:10808` is useless if that port is not listening);
 - DNS mode differences between the application and command-line test;
 - a client clock outside the server's accepted range.

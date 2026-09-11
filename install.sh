@@ -40,6 +40,7 @@ references/handshake-diagnosis.md
 references/router-deployment.md
 references/resilience-and-subscriptions.md
 references/verification-runbook.md
+references/tproxy-ghost-socket.md
 scripts/check-markdown-links.py
 scripts/scan-secrets.sh
 scripts/validate-xray-candidate.sh

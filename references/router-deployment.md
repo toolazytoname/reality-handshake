@@ -158,7 +158,9 @@ sequenceDiagram
   C->>X: verify PID, listeners, proxy and DNS
 ```
 
-Use a lock to avoid two init/health/update scripts mutating state simultaneously. Recreate cron entries idempotently on boot because `/tmp` cron state may not persist.
+Use a lock to avoid two init/health/update scripts mutating state simultaneously. Recreate cron entries idempotently on boot because `/tmp` cron state may not persist. If the lock is a `mkdir` directory, boot cleanup must `rmdir` it; `rm -f` leaves the directory and every later start fails to acquire the lock.
+
+On Linux 2.6.x, TPROXY binds can remain reserved after SIGKILL while staying invisible to busybox `netstat` and `/proc/net`. Health scripts that restart the same port every few minutes will not recover. Persist the TPROXY port, give start an EADDRINUSE escape to a candidate port, and fail loudly. Details: [tproxy-ghost-socket.md](tproxy-ghost-socket.md).
 
 ## Runtime limits
 
@@ -166,6 +168,7 @@ Use a lock to avoid two init/health/update scripts mutating state simultaneously
 - Disable access logging for normal operation. Rotate or cap error/console logs so JFFS cannot fill.
 - Monitor PID, required listeners, RSS, open FD count, config hash, and last successful proxy/DNS test.
 - Restart the process only for process/config failure. Let the outbound observatory handle a single dead node.
+- After a failed start, reap the Xray child. Wait at least one second, preferably two, before the next TPROXY bind. Give geodata load ~25 seconds before declaring listeners down.
 - Consider a monthly maintenance restart only after health monitoring exists; scheduled restarts are not a substitute for leak evidence.
 - Batch SSH commands on firmware with aggressive brute-force limits instead of opening many sessions quickly.
 

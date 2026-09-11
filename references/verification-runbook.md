@@ -20,6 +20,10 @@ Use this after a deployment, a node/rule update, or a handshake repair. Record p
 
 Do not use a sensitive node endpoint or subscription URL as test output.
 
+A workstation whose TUN/VPN client excludes the LAN is not an acceptance oracle. Query the router DNS or use a client that actually traverses LAN TPROXY. Router `wget`/`curl` usually does not traverse a `-i br0` TPROXY chain; those tools cannot prove the transparent path.
+
+If console bind fails with `EADDRINUSE` while `netstat` and `/proc/net` omit the port, follow [tproxy-ghost-socket.md](tproxy-ghost-socket.md) instead of looping `restart` on the same port.
+
 ## Diagnose a failed web test
 
 ```mermaid
@@ -27,7 +31,9 @@ flowchart TD
   A["Website fails"] --> D{"Direct HTTPS works?"}
   D -->|No| W["Fix WAN / resolver / clock"]
   D -->|Yes| L{"Xray PID and listener?"}
-  L -->|No| P["Inspect startup, FD, config"]
+  L -->|No| B{"Console: address already in use?"}
+  B -->|Yes| GS["If netstat is empty, treat as ghost TPROXY bind; do not restart the same port"]
+  B -->|No| P["Inspect startup, FD, config"]
   L -->|Yes| Q{"DNS answer clean?"}
   Q -->|No| C["Trace dnsmasq conditional rule and DNS selector"]
   Q -->|Yes| R{"Expected routing rule hit?"}
