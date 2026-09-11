@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Old-kernel TPROXY ghost-socket runbook: `EADDRINUSE` with empty netstat, health-loop amplification, directory-lock cleanup, and a single source of truth for the TPROXY port.
+- Automatic `degraded` mode (interception off, GFW DNS still proxy-only) distinct from manual `direct`; alert-only resource thresholds; single-session SSH deploys on rate-limited firmware; `.json` extension requirement for staged Xray candidates.
 - Handshake diagnosis: Clash Meta `server:` on free DDNS (including `abrdns`) can fail to resolve from a domestic relay while TCP to the real inbound still works; mixed-port Timeout / `SSL_ERROR_SYSCALL` is not proof that Xray is down.
 - Clash Meta API hot-reload (`PUT /configs?force=true`) is memory-only; on-disk yaml must still be updated for persistence. Stale `proxy-on` SOCKS aliases vs mixed-port `7890`.
 

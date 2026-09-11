@@ -66,6 +66,26 @@ Do not switch TPROXY to REDIRECT as an emergency step unless the user accepts wo
 
 Do not upgrade a 2.6.x vendor kernel in place to “fix TPROXY.” Wi-Fi and switch drivers are coupled to that image.
 
+## Degraded mode, not blanket direct
+
+When health gives up on the process, do not silently unset the GFW DNS forwarding. Split the two operator outcomes:
+
+- `direct` (manual): remove interception **and** the conditional DNS forward. Fully fail-open; mark it so health does not undo a human decision.
+- `degraded` (automatic): remove interception so ordinary sites keep working, but leave GFW names pointed at the dead Xray DNS inbound. Listed names fail instead of being answered by a polluted resolver. Health may auto-restore from `degraded`; it must not auto-restore from a manual `direct`.
+
+If the user has accepted fail-closed for the data plane, the GFW balancer's `fallbackTag` should be a fixed proxy outbound, not `direct`, and the subscription renderer must emit the same value.
+
+Health should also stop treating resource thresholds as kill signals on this kernel. Every SIGKILL is a chance to leak another TPROXY bind. Alert on soft FD/RSS thresholds; restart only on hard ceilings, on a dead PID, or on listeners missing for two consecutive checks. Capture a redacted crash scene (meminfo, dmesg tail, console tail) before the restart so the next incident has a first-scene record.
+
+## Operating the box without tripping SSH limits
+
+FreshTomato and similar firmware rate-limit SSH logins. Repeated `ssh host 'cmd'` loops during a repair will lock you out for minutes at a time.
+
+- Ship one payload and one idempotent deploy script per change: `tar cf - files | ssh host 'cd /tmp/stage && tar xf - && sh deploy.sh'`.
+- Put verification inside the deploy script; do not open a second session to “check”.
+- Do not use `ControlMaster`/`ControlPersist` from an automation harness. The background master keeps stdout open and the caller waits forever.
+- Xray infers config format from the file extension. Staged candidates must end in `.json`, or `xray run -test` fails with “Failed to get format” and the swap looks like a config error.
+
 ## Acceptance after recovery
 
 Minimum, from a non-TUN vantage point:
